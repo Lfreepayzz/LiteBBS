@@ -86,7 +86,7 @@ ON `forum_db`.* TO 'forum_app'@'WEB_SERVER_IP';
 - 审计日志
 - 站点设置
 
-## 官方更新
+## 程序更新
 
 程序更新源固定为：
 
@@ -126,7 +126,10 @@ templates/
 - 更新前保留数据库和文件备份。
 - 定期通过 CLI 执行清理脚本：
 
-
+## 官方地址
+```text
+https://bolgk.eu.org/
+```
 
 ## 许可证
 
