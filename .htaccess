@@ -1,0 +1,22 @@
+Options -Indexes
+RewriteEngine On
+<FilesMatch "^(?:\..*|config\.php.*|install\.lock|.*\.(?:sql|tmp|md|ps1|sh|ini|bak|old|orig|swp))$">
+ Require all denied
+</FilesMatch>
+RedirectMatch 404 ^/(?:\.git|\.svn)(?:/|$)
+RedirectMatch 404 ^/(?:app|languages|database|cache|logs|uploads|plugins|private|scripts)/
+RedirectMatch 404 ^/market-packages/
+RewriteRule ^admin/?$ index.php [L]
+RewriteRule ^admin\.css$ index.php [L]
+RewriteRule ^install/?$ install.php [END]
+RewriteRule ^install\.css$ - [L]
+RewriteCond %{REQUEST_URI} ^/templates/ [NC]
+RewriteCond %{REQUEST_URI} !^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ [NC]
+RewriteRule ^ - [R=404,L]
+<FilesMatch "^(?!(?:index|install)\.php$).+\.php$">
+ Require all denied
+</FilesMatch>
+RewriteCond %{REQUEST_URI} ^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ [NC]
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+RewriteRule ^ index.php [L]

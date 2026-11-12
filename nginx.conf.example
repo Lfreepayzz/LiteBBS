@@ -1,0 +1,97 @@
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 80;
+    server_name forum.example.com;
+    return 301 https://forum.example.com$request_uri;
+}
+
+server {
+    listen 443 ssl http2 default_server;
+    server_name forum.example.com;
+    # Replace this hostname, certificate paths, and installer address before deployment.
+    ssl_certificate /etc/letsencrypt/live/forum.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/forum.example.com/privkey.pem;
+    if ($host != forum.example.com) { return 444; }
+    root /srv/litebbs;
+    index index.php;
+    client_max_body_size 6m;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'self'; script-src 'self'" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript application/xml image/svg+xml;
+
+    location = /index.php {
+        include fastcgi_params;
+        fastcgi_param HTTPS on;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+    }
+
+    location = /install.php {
+        include fastcgi_params;
+        fastcgi_param HTTPS on;
+        fastcgi_param SCRIPT_FILENAME $document_root/install.php;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+    }
+
+    location = /install {
+        include fastcgi_params;
+        fastcgi_param HTTPS on;
+        fastcgi_param SCRIPT_FILENAME $document_root/install.php;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+    }
+
+    location = /admin.css {
+        include fastcgi_params;
+        fastcgi_param HTTPS on;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+    }
+
+    location = /install.css {
+        try_files $uri =404;
+        add_header Cache-Control "no-store" always;
+    }
+
+    # Before exposing an uninstalled site publicly, temporarily restrict /install
+    # in the virtual host to a trusted administrator IP or CIDR, then remove it
+    # after private/install.lock has been created:
+    # location = /install { allow 203.0.113.10; deny all; include fastcgi_params;
+    #     fastcgi_param HTTPS on; fastcgi_param SCRIPT_FILENAME $document_root/install.php;
+    #     fastcgi_pass unix:/run/php/php-fpm.sock; }
+
+    location ~ ^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ {
+        try_files $uri =404;
+        expires 1d;
+        add_header Cache-Control "public, max-age=86400" always;
+    }
+    location ~ ^/templates/ { return 404; }
+
+    location ^~ /plugins/ { return 404; }
+    location ^~ /app/ { return 404; }
+    location ^~ /database/ { return 404; }
+    location ^~ /cache/ { return 404; }
+    location ^~ /logs/ { return 404; }
+    location ^~ /uploads/ { return 404; }
+    location ^~ /market-packages/ { return 404; }
+    location ~ ^/(?:config\.php.*|.*\.(?:tmp|md|ps1|sh|ini|example|conf)|install\.lock|\.env|\.git) { return 404; }
+    location ~ (^|/)private/ { return 404; }
+    location ^~ /scripts/ { return 404; }
+    location ~ /\. { return 404; }
+    location ~ \.php$ { return 404; }
+
+    location / { try_files /__litebbs_no_static_files__ /index.php?$query_string; }
+}

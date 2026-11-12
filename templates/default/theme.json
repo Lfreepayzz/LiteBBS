@@ -1,0 +1,8 @@
+{
+  "name": "rhex",
+  "version": "1.0.0",
+  "requires": ">=1.0 <2.0",
+  "entry": "layout.php",
+  "title": "简洁论坛",
+  "author": "LiteBBS"
+}
