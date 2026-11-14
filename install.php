@@ -60,7 +60,7 @@ if ($method === 'POST') {
             if ($sameDatabase) { $recoveringConfiguredInstall = true; $resuming = true; }
         }
         $pdo = new PDO("mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4", $dbuser, $dbpass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false]);
-        $allowed = ['schema_migrations','users','sessions','categories','topics','posts','post_revisions','point_ledger','settings','plugins','themes','audit_logs','rate_limits','market_submissions'];
+        $allowed = ['schema_migrations','users','sessions','categories','topics','posts','post_revisions','point_ledger','settings','plugins','themes','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'];
         $tables = $pdo->query('SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE()')->fetchAll(PDO::FETCH_COLUMN);
         if (array_diff($tables, $allowed) || (!$resuming && $tables)) throw new RuntimeException('数据库不是由本次安装创建的空数据库，拒绝继续');
         $state = ['request_hash'=>$requestHash];
@@ -82,9 +82,11 @@ if ($method === 'POST') {
         $existingAdmin->execute([$admin,$email]);
         $existingHash = $existingAdmin->fetchColumn();
         if ($users > 1 || $categories > 1 || ($users === 1 && (!$existingHash || !password_verify($password, (string)$existingHash)))) throw new RuntimeException('数据库不符合本次安装的可恢复状态');
-        foreach (['sessions','topics','posts','post_revisions','point_ledger','settings','plugins','audit_logs','rate_limits','market_submissions'] as $table) {
-            if ((int)$pdo->query('SELECT COUNT(*) FROM `'.$table.'`')->fetchColumn() !== 0) throw new RuntimeException('数据库已包含论坛运行数据，拒绝将其作为未完成安装继续；没有数据被删除。');
+        $nonEmptyTables = [];
+        foreach (['sessions','topics','posts','post_revisions','point_ledger','settings','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'] as $table) {
+            if ((int)$pdo->query('SELECT COUNT(*) FROM `'.$table.'`')->fetchColumn() !== 0) $nonEmptyTables[] = $table;
         }
+        if ($nonEmptyTables) throw new RuntimeException('数据库已包含论坛运行数据（'.implode(', ', $nonEmptyTables).'），拒绝将其作为未完成安装继续；没有数据被删除。已有站点请保留 private 配置和安装锁后直接访问论坛；升级现有站点请使用 CLI 迁移脚本。');
         $hash = password_hash($password, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_BCRYPT);
         if (!$users) $pdo->prepare("INSERT INTO users(username,email,password_hash,role,created_at) VALUES(?,?,?,'admin',UTC_TIMESTAMP(6))")->execute([$admin, $email, $hash]);
         if (!$categories) $pdo->prepare('INSERT INTO categories(slug,title,description,position) VALUES(?,?,?,1)')->execute(['general', '日常讨论', '分享想法，也听听不同的声音']);
@@ -109,5 +111,5 @@ $fields .= '<section class="install-section"><div class="section-heading"><span>
 $form = form('/install', '完成基础配置', $fields);
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');
-echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#edf2ed"><title>安装 LiteBBS</title><link rel="stylesheet" href="/install.css"></head><body><main class="install-shell"><aside class="install-rail"><a class="brand" href="/install"><span class="brand-mark">L</span><span>LiteBBS</span></a><div class="rail-copy"><span class="rail-kicker">FIRST RUN</span><h1>搭建你的<br>讨论空间。</h1><p>只需完成三项基础配置，即可开始使用论坛。</p></div><div class="rail-steps"><span><b>01</b> 站点信息</span><span><b>02</b> 数据库连接</span><span><b>03</b> 管理员账户</span></div><small>SECURE SETUP · HTTPS</small></aside><section class="install-main"><header class="mobile-brand"><span class="brand-mark">L</span><span>LiteBBS</span><span class="setup-tag">INITIAL SETUP</span></header><div class="page-heading"><p class="eyebrow">INITIAL SETUP <span> / </span> CONFIGURATION</p><h2>欢迎，开始安装</h2><p>设置站点、数据库和首位管理员。安装不会删除数据库中的现有数据。</p></div>'.$error.$form.'<footer>数据库账号将用于论坛日常运行及受控数据库升级。</footer></section></main></body></html>';
+echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#edf2ed"><title>安装 LiteBBS</title><link rel="stylesheet" href="/assets/css/install.css"></head><body><main class="install-shell"><aside class="install-rail"><a class="brand" href="/install"><span class="brand-mark">L</span><span>LiteBBS</span></a><div class="rail-copy"><span class="rail-kicker">FIRST RUN</span><h1>搭建你的<br>讨论空间。</h1><p>只需完成三项基础配置，即可开始使用论坛。</p></div><div class="rail-steps"><span><b>01</b> 站点信息</span><span><b>02</b> 数据库连接</span><span><b>03</b> 管理员账户</span></div><small>SECURE SETUP · HTTPS</small></aside><section class="install-main"><header class="mobile-brand"><span class="brand-mark">L</span><span>LiteBBS</span><span class="setup-tag">INITIAL SETUP</span></header><div class="page-heading"><p class="eyebrow">INITIAL SETUP <span> / </span> CONFIGURATION</p><h2>欢迎，开始安装</h2><p>设置站点、数据库和首位管理员。安装不会删除数据库中的现有数据。</p></div>'.$error.$form.'<footer>数据库账号将用于论坛日常运行及受控数据库升级。</footer></section></main></body></html>';
 exit;

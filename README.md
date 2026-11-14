@@ -1,6 +1,14 @@
 # LiteBBS
 
-LiteBBS 是一个轻量的 PHP + MySQL/MariaDB 自托管论坛程序，提供主题讨论、分区管理、用户管理、内容审核、审计日志、模板和扩展管理功能。
+LiteBBS 是一个轻量 PHP + MySQL/ 论坛程序，提供主题讨论、分区管理、用户管理、内容审核、审计日志、模板和扩展管理功能。
+
+## 截图
+
+![LiteBBS Screenshot 1](https://raw.githubusercontent.com/Lfreepayzz/LiteBBS/refs/heads/main/img/1.png)
+
+![LiteBBS Screenshot 2](https://raw.githubusercontent.com/Lfreepayzz/LiteBBS/refs/heads/main/img/2.png)
+
+![LiteBBS Screenshot 3](https://raw.githubusercontent.com/Lfreepayzz/LiteBBS/refs/heads/main/img/3.png)
 
 ## 功能
 
@@ -78,7 +86,7 @@ ON `forum_db`.* TO 'forum_app'@'WEB_SERVER_IP';
 - 审计日志
 - 站点设置
 
-## 官方更新
+## 程序更新
 
 程序更新源固定为：
 
@@ -117,7 +125,6 @@ templates/
 - 不要通过网页直接安装未经审查的 PHP 模板或插件。
 - 更新前保留数据库和文件备份。
 - 定期通过 CLI 执行清理脚本：
-
 
 
 ## 许可证

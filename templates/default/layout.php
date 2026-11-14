@@ -8,11 +8,11 @@
   <meta name="robots" content="<?= $indexable ? 'index,follow' : 'noindex,follow' ?>">
   <title><?= e($title) ?> · <?= e($c['site'] ?? 'LiteBBS') ?></title>
   <?php if ($indexable): ?><link rel="canonical" href="<?= e($canonical) ?>"><?php endif; ?>
-  <link rel="stylesheet" href="/templates/<?= e($safe) ?>/assets/theme.css">
-  <?php if ($isHomePage || str_starts_with($requestPath, '/c/')): ?><link rel="stylesheet" href="/templates/<?= e($safe) ?>/assets/home.css"><?php endif; ?>
-  <?php if ($isTopicPage): ?><link rel="stylesheet" href="/templates/<?= e($safe) ?>/assets/topic.css"><?php endif; ?>
+  <?= theme_runtime_assets($safe, $isHomePage, $isTopicPage) ?>
+  <?= plugin_stylesheets() ?><?= extension_stylesheets() ?>
+  <?= extension_slot('head.assets', ['path'=>$requestPath, 'user'=>$user]) ?>
 </head>
-<body>
+<body<?= $isTopicPage ? ' class="topic-page"' : '' ?>>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
   <header class="site-header">
     <div class="header-inner">
@@ -21,7 +21,8 @@
       <form class="header-search" action="/search" method="get" role="search"><label class="visually-hidden" for="rhex-search">搜索主题</label><input id="rhex-search" name="q" type="search" maxlength="60" placeholder="搜索讨论"><button type="submit" aria-label="搜索">⌕</button></form>
       <nav class="account-nav" aria-label="账户">
         <?php if ($user): ?>
-          <a class="user-link" href="/me"><span class="mini-avatar" aria-hidden="true"><?= e(text_slice($user['username'], 0, 1)) ?></span><span><?= e($user['username']) ?></span></a>
+          <?php [$unreadNotifications,$unreadMessages]=unread_counts((int)$user['id']);$unreadTotal=$unreadNotifications+$unreadMessages; ?>
+          <a class="user-link" href="/me"><span class="mini-avatar" aria-hidden="true"><?php if (!empty($user['avatar_path'])): ?><img src="/avatar/<?= (int)$user['id'] ?>" alt=""><?php else: ?><?= e(text_slice($user['username'], 0, 1)) ?><?php endif; ?></span><span><?= e($user['username']) ?></span><?php if ($unreadTotal): ?><span class="notification-count" aria-label="<?= $unreadTotal ?> 条未读消息"><?= $unreadTotal > 99 ? '99+' : $unreadTotal ?></span><?php endif; ?></a>
           <?php if ($user['role'] === 'admin'): ?><a href="/admin">管理</a><?php endif; ?>
           <form method="post" action="/logout"><input type="hidden" name="csrf" value="<?= e(csrf()) ?>"><button type="submit">退出</button></form>
         <?php else: ?>
@@ -47,7 +48,7 @@
       </section>
       <section class="sidebar-card">
         <div class="sidebar-heading"><h2>讨论分区</h2><a href="/">全部</a></div>
-        <nav class="category-list" aria-label="讨论分区"><?= $left ?></nav>
+        <nav class="category-list" aria-label="讨论分区"><?= $left ?><?= extension_slot('sidebar.sections', ['path'=>$requestPath, 'user'=>$user]) ?></nav>
       </section>
       <section class="sidebar-card rules-card">
         <h2>社区公约</h2>

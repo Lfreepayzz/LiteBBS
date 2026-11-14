@@ -1,0 +1,19 @@
+{
+  "name": "litebbs/forum",
+  "description": "Lightweight PHP discussion forum",
+  "type": "project",
+  "require": {
+    "php": ">=8.1",
+    "ext-mbstring": "*",
+    "ext-pdo": "*",
+    "ext-pdo_mysql": "*",
+    "ext-fileinfo": "*",
+    "ext-zip": "*"
+  },
+  "suggest": {
+    "ext-redis": "Required for shared sessions, cache and rate limits across web nodes."
+  },
+  "scripts": {
+    "test": "php tests/framework.php"
+  }
+}

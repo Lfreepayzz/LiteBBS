@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "zip-remote-attachments",
+  "version": "2.0.0",
+  "requires": { "core": ">=1.0 <2.0" },
+  "entry": "src/Plugin.php",
+  "class": "ZipRemoteAttachmentsPlugin",
+  "permissions": ["database", "storage", "routes", "views", "assets"],
+  "database_tables": [
+    "plg_zip_remote_attachments_files",
+    "plg_zip_remote_attachments_grants"
+  ]
+}

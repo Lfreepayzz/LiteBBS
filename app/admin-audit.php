@@ -14,4 +14,4 @@ foreach ($rows as $row) {
 }
 if (count($rows) === 100) $body .= '<p><a href="/admin/audit?before='.(int)end($rows)['id'].'">更早的记录</a></p>';
 page('审计日志', $body, '', false, true);
-exit;
+return;

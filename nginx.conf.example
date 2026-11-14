@@ -36,6 +36,7 @@ server {
     location = /index.php {
         include fastcgi_params;
         fastcgi_param HTTPS on;
+        fastcgi_param LITEBBS_X_ACCEL_REDIRECT 1;
         fastcgi_param SCRIPT_FILENAME $document_root/index.php;
         fastcgi_pass unix:/run/php/php-fpm.sock;
     }
@@ -54,29 +55,22 @@ server {
         fastcgi_pass unix:/run/php/php-fpm.sock;
     }
 
-    location = /admin.css {
-        include fastcgi_params;
-        fastcgi_param HTTPS on;
-        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
-        fastcgi_pass unix:/run/php/php-fpm.sock;
-    }
-
-    location = /install.css {
+    location ~ ^/assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ {
         try_files $uri =404;
         add_header Cache-Control "no-store" always;
     }
 
-    # Before exposing an uninstalled site publicly, temporarily restrict /install
-    # in the virtual host to a trusted administrator IP or CIDR, then remove it
-    # after private/install.lock has been created:
-    # location = /install { allow 203.0.113.10; deny all; include fastcgi_params;
-    #     fastcgi_param HTTPS on; fastcgi_param SCRIPT_FILENAME $document_root/install.php;
-    #     fastcgi_pass unix:/run/php/php-fpm.sock; }
+    # PHP authorizes local plugin downloads, then delegates file transfer to
+    # Nginx so slow clients do not occupy a PHP-FPM worker.
+    location ^~ /__litebbs-uploads/ {
+        internal;
+        alias /srv/litebbs/uploads/;
+    }
 
     location ~ ^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ {
         try_files $uri =404;
-        expires 1d;
-        add_header Cache-Control "public, max-age=86400" always;
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
     }
     location ~ ^/templates/ { return 404; }
 

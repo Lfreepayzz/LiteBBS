@@ -48,6 +48,6 @@ foreach ($recent as $topic) {
     }
     $body .= '</div></article>';
 }
-$body .= '</section><section class="dashboard-links"><a href="/admin/users">用户管理</a><a href="/admin/categories">分区管理</a><a href="/admin/settings">站点设置</a><a href="/admin/plugins">插件管理</a><a href="/admin/themes">模板管理</a><a href="/admin/market">扩展审核</a><a href="/admin/audit">审计日志</a></section>';
+$body .= '</section><section class="dashboard-links"><a href="/admin/users">用户管理</a><a href="/admin/categories">分区管理</a><a href="/admin/settings">站点设置</a><a href="/admin/reports">举报审核</a><a href="/admin/plugins">插件管理</a><a href="/admin/themes">模板管理</a><a href="/admin/market">扩展审核</a><a href="/admin/audit">审计日志</a></section>';
 page('管理总览', $body);
-exit;
+return;

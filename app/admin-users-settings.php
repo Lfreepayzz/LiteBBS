@@ -16,7 +16,7 @@ if ($path === '/admin/content') {
             $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="action" value="delete"><button>永久删除</button></form></div></article>';
         }
         page('内容管理', $body);
-        exit;
+        return;
     }
     require_post();
     $id = (int)($_POST['id'] ?? 0);
@@ -46,21 +46,27 @@ if ($method === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         $role = (string)($_POST['role'] ?? 'member');
         $status = (string)($_POST['status'] ?? 'active');
+        $developer = isset($_POST['is_developer']) ? 1 : 0;
         if (!$id || $id === (int)$actor['id'] || !in_array($role, ['member', 'moderator', 'admin'], true) || !in_array($status, ['active', 'disabled'], true)) fail(400, '用户操作无效');
-        $pdo->beginTransaction();
+        $db = db();
+        $db->beginTransaction();
+        $target = h('SELECT role,status FROM users WHERE id=? FOR UPDATE', [$id])->fetch();
+        if (!$target) {
+            $db->rollBack();
+            fail(404, '用户不存在');
+        }
         if ($role !== 'admin' || $status !== 'active') {
             $activeAdmins = h('SELECT id FROM users WHERE role="admin" AND status="active" FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN);
-            $target = h('SELECT role,status FROM users WHERE id=? FOR UPDATE', [$id])->fetch();
-            if (!$target || ($target['role'] === 'admin' && $target['status'] === 'active' && count($activeAdmins) <= 1)) {
-                $pdo->rollBack();
+            if ($target['role'] === 'admin' && $target['status'] === 'active' && count($activeAdmins) <= 1) {
+                $db->rollBack();
                 fail(409, '至少必须保留一名启用中的管理员');
             }
         }
-        h('UPDATE users SET role=?,status=? WHERE id=?', [$role, $status, $id]);
+        h('UPDATE users SET role=?,status=?,is_developer=? WHERE id=?', [$role, $status, $developer, $id]);
         h('DELETE FROM sessions WHERE user_id=?', [$id]);
         if ($id === (int)($_SESSION['uid'] ?? 0)) { $_SESSION = []; session_destroy(); }
-        audit('user.updated', 'user', $id, ['role' => $role, 'status' => $status]);
-        $pdo->commit();
+        audit('user.updated', 'user', $id, ['role' => $role, 'status' => $status, 'is_developer' => $developer]);
+        $db->commit();
         redirect('/admin/users');
     }
 
@@ -82,13 +88,13 @@ if ($method === 'POST') {
 
 if ($path === '/admin/users') {
     $body = '';
-    foreach (h('SELECT id,username,email,role,status,points FROM users ORDER BY id DESC LIMIT 100')->fetchAll() as $row) {
+    foreach (h('SELECT id,username,email,role,status,is_developer,points FROM users ORDER BY id DESC LIMIT 100')->fetchAll() as $row) {
         $body .= '<form class="adminrow" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'">'.e($row['username']).' · '.e($row['email']).' · '.(int)$row['points'].'<select name="role">';
         foreach (['member' => '成员', 'moderator' => '版主', 'admin' => '管理员'] as $role => $label) $body .= '<option value="'.$role.'"'.($row['role'] === $role ? ' selected' : '').'>'.$label.'</option>';
-        $body .= '</select><select name="status"><option value="active"'.($row['status'] === 'active' ? ' selected' : '').'>正常</option><option value="disabled"'.($row['status'] !== 'active' ? ' selected' : '').'>停用</option></select><button>保存并撤销会话</button></form>';
+        $body .= '</select><select name="status"><option value="active"'.($row['status'] === 'active' ? ' selected' : '').'>正常</option><option value="disabled"'.($row['status'] !== 'active' ? ' selected' : '').'>停用</option></select><label><input type="checkbox" name="is_developer" value="1"'.((int)$row['is_developer'] === 1 ? ' checked' : '').'>开发者权限</label><button>保存并撤销会话</button></form>';
     }
     page('用户管理', $body);
-    exit;
+    return;
 }
 
 $settings = [];
@@ -99,4 +105,4 @@ $body = form('/admin/settings', '保存设置',
     '<label>发帖间隔（秒）<input name="post_interval" type="number" min="0" max="3600" value="'.(int)($settings['post_interval'] ?? 0).'"></label>'.
     '<label>默认语言<select name="locale"><option'.(($config['locale'] ?? 'zh-CN') === 'zh-CN' ? ' selected' : '').'>zh-CN</option><option'.(($config['locale'] ?? 'zh-CN') === 'en-US' ? ' selected' : '').'>en-US</option></select></label>');
 page('站点设置', $body);
-exit;
+return;
