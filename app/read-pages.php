@@ -8,11 +8,29 @@ if (preg_match('~^/t/(\d+)(?:-[^/]+)?$~', $path, $match)) {
     $id = (int)$match[1];
     if ($path !== '/t/'.$id) redirect('/t/'.$id, 301);
 
+    $pageNo = max(1, (int)($_GET['page'] ?? 1));
+    $afterId = max(0, (int)($_GET['after'] ?? 0));
+    $anonymous = empty($_COOKIE[session_name()]);
+    $versions = cache_versions(['topic:'.$id,'extension-read-pages','categories','plugins']);
+    $config = load_config();
+    $shellVersion = hash('sha256', implode("\0", [
+        (string)($config['site'] ?? ''),
+        (string)($config['url'] ?? ''),
+        (string)($config['theme'] ?? 'default'),
+        (string)($config['locale'] ?? 'zh-CN'),
+        json_encode($config['seo'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
+    ]));
+    $pageCacheKey = 'topic-page:v1:'.$id.':'.$shellVersion.':'.(int)$versions['topic:'.$id].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'].':'.(int)$versions['plugins'];
+    if ($anonymous && $pageNo === 1 && $afterId === 0 && ($cachedPage = page_cache_read($pageCacheKey, 30)) !== null) {
+        count_topic_view($id);
+        public_read_response_cache(null);
+        echo (string)($cachedPage[0] ?? '');
+        return;
+    }
+
     $topic = h('SELECT t.*,c.id category_id,c.title category,c.slug category_slug,u.username,(SELECT MIN(p.id) FROM posts p WHERE p.topic_id=t.id AND p.status="normal") original_post_id FROM topics t JOIN categories c ON c.id=t.category_id JOIN users u ON u.id=t.user_id WHERE t.id=? AND t.status="normal" AND c.is_visible=1', [$id])->fetch();
     if (!$topic) fail(404, '主题不存在');
 
-    $pageNo = max(1, (int)($_GET['page'] ?? 1));
-    $afterId = max(0, (int)($_GET['after'] ?? 0));
     // New cursor links carry the last displayed floor, avoiding a growing
     // COUNT(*) scan for every subsequent page of a long topic. Keep the
     // count fallback for existing bookmarks and manually shared links.
@@ -21,9 +39,7 @@ if (preg_match('~^/t/(\d+)(?:-[^/]+)?$~', $path, $match)) {
     if ($pageNo > $pages) fail(404, '页面不存在');
     if ($pageNo > 1 && $afterId === 0) fail(400, '分页方式已更新，请从主题首页使用游标继续浏览');
     $user = current_user();
-    $versions = cache_versions(['topic:'.$id,'extension-read-pages','categories','plugins']);
-    $key = 'topic:v8:'.$id.':'.$pageNo.':'.$afterId.':'.(int)$versions['topic:'.$id].':'.(int)$versions['extension-read-pages'];
-    $body = !$user && $afterId === 0 ? read_cache($key, 30) : null;
+    $body = null;
 
     if ($body === null) {
         if ($afterId > 0) {
@@ -68,21 +84,24 @@ if (preg_match('~^/t/(\d+)(?:-[^/]+)?$~', $path, $match)) {
         }
         if (!empty($topic['is_locked'])) $body .= '<p class="locked-note">该主题已锁定，暂不能回复。</p>';
         elseif ($user) $body .= '<section class="reply-composer" id="reply-composer" aria-labelledby="reply-composer-title"><div class="reply-composer-heading"><div><p class="eyebrow">YOUR REPLY</p><h2 id="reply-composer-title">参与讨论</h2></div><span>以 '.e($user['username']).' 的身份回复</span></div><div class="reply-quote-note" hidden><strong></strong><blockquote></blockquote></div><form method="post" action="/t/'.$id.'/reply"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" id="reply-to-post" name="reply_to_post" value=""><label class="reply-editor" for="reply-body"><span>回复内容</span><textarea id="reply-body" name="body" maxlength="12000" rows="7" placeholder="写下清晰、友善且有帮助的回复…" required></textarea></label><div class="reply-composer-actions"><small>支持换行纯文本，最多 12,000 字</small><button class="primary">发布回复</button></div></form></section>';
-        if (!$user && $afterId === 0) write_cache($key, [$body], 30);
-    } else {
-        $body = $body[0] ?? '';
     }
 
     count_topic_view($id);
-    page($topic['title'], $body, '讨论主题：'.$topic['title'], true);
+    if ($anonymous && $pageNo === 1 && $afterId === 0) {
+        public_read_response_cache(null);
+        ob_start();
+        page($topic['title'], $body, '讨论主题：'.$topic['title'], true);
+        $html = (string)ob_get_clean();
+        page_cache_write($pageCacheKey, [$html], 30);
+        echo $html;
+    } else {
+        page($topic['title'], $body, '讨论主题：'.$topic['title'], true);
+    }
     return;
 }
 
 if (preg_match('~^/c/(\d+)$~', $path, $match)) {
     $id = (int)$match[1];
-    $category = h('SELECT id,title,description FROM categories WHERE id=? AND is_visible=1', [$id])->fetch();
-    if (!$category) fail(404, '分区不存在');
-
     $pageNo = max(1, (int)($_GET['page'] ?? 1));
     $categoryCursor = (string)($_GET['cursor'] ?? '');
     if (strlen($categoryCursor) > 256) fail(400, '分页游标无效');
@@ -94,10 +113,27 @@ if (preg_match('~^/c/(\d+)$~', $path, $match)) {
         $categoryCursorData = ['p'=>(int)$candidate['p'],'d'=>$candidate['d'],'i'=>(int)$candidate['i']];
     }
     $versions = cache_versions(['topics','categories','category-feed:'.$id,'extension-read-pages','plugins']);
+    $anonymous = empty($_COOKIE[session_name()]);
+    $config = load_config();
+    $shellVersion = hash('sha256', implode("\0", [
+        (string)($config['site'] ?? ''),
+        (string)($config['url'] ?? ''),
+        (string)($config['theme'] ?? 'default'),
+        (string)($config['locale'] ?? 'zh-CN'),
+        json_encode($config['seo'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
+    ]));
+    $pageCacheKey = 'category-page:v1:'.$id.':'.$pageNo.':'.hash('sha256',$categoryCursor).':'.$shellVersion.':'.(int)$versions['categories'].':'.(int)$versions['category-feed:'.$id].':'.(int)$versions['extension-read-pages'].':'.(int)$versions['plugins'];
+    if ($anonymous && ($cachedPage = page_cache_read($pageCacheKey, 30)) !== null) {
+        public_read_response_cache(null);
+        echo (string)($cachedPage[0] ?? '');
+        return;
+    }
     $topicCount = cached_topic_count('category',$id);
     $pages = max(1, (int)ceil($topicCount / 30));
     if ($pageNo > $pages || $pageNo > 100000) fail(404, '页面不存在');
     if ($pageNo > 1 && $categoryCursor === '') fail(400, '分页方式已更新，请从分区首页使用游标继续浏览');
+    $category = h('SELECT id,title,description FROM categories WHERE id=? AND is_visible=1', [$id])->fetch();
+    if (!$category) fail(404, '分区不存在');
     $key = 'category:v3:'.$id.':'.$pageNo.':'.hash('sha256',$categoryCursor).':'.(int)$versions['category-feed:'.$id].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'];
     $loadRows = static function () use ($id, $categoryCursorData): array {
         $args=[$id];$where='t.category_id=? AND t.status="normal"';
@@ -111,6 +147,14 @@ if (preg_match('~^/c/(\d+)$~', $path, $match)) {
     $body = '<p class="eyebrow">SPACE / '.e($category['title']).'</p><h1>'.e($category['title']).'</h1><p>'.e($category['description']).'</p>';
     foreach ($rows as $topic) $body .= '<article class="topic topic-feed-item'.($topic['is_pinned']?' is-pinned':'').'"><span class="topic-avatar" aria-hidden="true">'.e(text_slice($topic['username'], 0, 1)).'</span><div class="topic-feed-main"><h2><a href="/t/'.(int)$topic['id'].'">'.e($topic['title']).'</a></h2><div class="topic-feed-meta">'.($topic['is_pinned']?'<span class="topic-pinned">置顶</span>':'').'<a class="topic-author" href="/u/'.rawurlencode($topic['username']).'">'.e($topic['username']).'</a><span class="topic-activity">最后活跃</span><time>'.e(substr((string)$topic['last_post_at'],0,16)).'</time></div></div><a class="topic-replies" href="/t/'.(int)$topic['id'].'#replies" aria-label="'.(int)$topic['reply_count'].' 条回复"><strong>'.(int)$topic['reply_count'].'</strong><span>回复</span></a></article>';
     if($nextCursor!=='')$body.='<nav class="pagination"><a class="pagination-next" href="/c/'.$id.'?cursor='.rawurlencode($nextCursor).'">'.($categoryCursor!==''?'加载更多':'继续浏览').'</a></nav>';
+    $viewer = $anonymous ? null : current_user();
+    public_read_response_cache($viewer);
+    if ($anonymous) ob_start();
     page($category['title'], $body, $category['description'], true);
+    if ($anonymous) {
+        $html = (string)ob_get_clean();
+        page_cache_write($pageCacheKey, [$html], 30);
+        echo $html;
+    }
     return;
 }

@@ -244,6 +244,7 @@ function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = 
             extension_manifest_hooks($manifest, 'slot');
             extension_manifest_hooks($manifest, 'event');
             extension_manifest_assets($manifest);
+            extension_manifest_admin_path($manifest, $id);
             require_once $entryFile;
             $plugin = new $class();
             if (!$plugin instanceof LiteBBSPlugin) throw new RuntimeException('Plugin entry must implement LiteBBSPlugin.');
@@ -311,7 +312,8 @@ function extension_preload(string $slot, array $view = []): void
     extension_runtime_load(null, 'slot', $slot);
     foreach (extension_registry()['preloads'][$slot] ?? [] as $entry) {
         if (extension_plugin_degraded($entry['plugin'])) continue;
-        try { ($entry['loader'])($view); }
+        $started=microtime(true);
+        try { ($entry['loader'])($view); if((microtime(true)-$started)>0.1){error_log('plugin preload '.$entry['plugin'].' exceeded 100ms budget');extension_plugin_failure($entry['plugin']);} }
         catch (Throwable $error) { error_log('plugin preload '.$entry['plugin'].' failed: '.$error->getMessage()); extension_plugin_failure($entry['plugin']); }
     }
 }
@@ -346,7 +348,8 @@ function extension_event_sync(string $event, array $payload): void
     extension_runtime_load(null, 'event', $event);
     foreach (extension_registry()['events'][$event] ?? [] as $entry) {
         if (extension_plugin_degraded($entry['plugin'])) continue;
-        try { ($entry['listener'])($payload); }
+        $started=microtime(true);
+        try { ($entry['listener'])($payload); if((microtime(true)-$started)>0.1){error_log('plugin sync event '.$entry['plugin'].' exceeded 100ms budget');extension_plugin_failure($entry['plugin']);} }
         catch (\LiteBBS\Framework\ResponseHalt $error) { extension_plugin_failure($entry['plugin']); throw $error; }
         catch (Throwable $error) { error_log('plugin sync event '.$entry['plugin'].' failed: '.$error->getMessage()); extension_plugin_failure($entry['plugin']); throw new RuntimeException('Plugin event '.$entry['plugin'].' failed.', 0, $error); }
     }

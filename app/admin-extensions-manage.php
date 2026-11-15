@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/builtin-plugin-schema.php';
 
 if (!in_array($path, ['/admin/themes', '/admin/plugins'], true) || !in_array($method, ['GET', 'POST'], true)) return;
 
@@ -81,8 +82,7 @@ if ($method === 'POST') {
         $applied = (int)h('SELECT COUNT(*) FROM plugin_migrations WHERE plugin_name=?', [$name])->fetchColumn();
         if ($files && $applied !== count($files)) fail(409, '插件迁移尚未完成。请先在发布环境执行：php scripts/plugin-migrate.php '.$name);
         if ($name === 'zip-remote-attachments') {
-            h('CREATE TABLE IF NOT EXISTS plg_zip_remote_attachments_files(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,post_id BIGINT UNSIGNED NOT NULL,user_id BIGINT UNSIGNED NOT NULL,source_kind ENUM("upload","remote") NOT NULL,storage_name CHAR(64) NULL,remote_url VARCHAR(2048) NULL,original_name VARCHAR(255) NOT NULL,file_size BIGINT UNSIGNED NULL,sha256 CHAR(64) NULL,access_mode ENUM("login","reply","points") NOT NULL DEFAULT "login",point_cost INT UNSIGNED NOT NULL DEFAULT 0,status ENUM("active","removed") NOT NULL DEFAULT "active",created_at DATETIME(6) NOT NULL,FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id),KEY ix_plg_zip_remote_attachments_post(post_id,status,id),KEY ix_plg_zip_remote_attachments_user_storage(user_id,source_kind,status,file_size)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-            h('CREATE TABLE IF NOT EXISTS plg_zip_remote_attachments_grants(user_id BIGINT UNSIGNED NOT NULL,attachment_id BIGINT UNSIGNED NOT NULL,grant_kind ENUM("reply","purchase") NOT NULL,created_at DATETIME(6) NOT NULL,PRIMARY KEY(user_id,attachment_id),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(attachment_id) REFERENCES plg_zip_remote_attachments_files(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            foreach (builtin_plugin_schema($name) as $sql) h($sql);
         }
         $tables = $manifest['database_tables'] ?? [];
         if (is_array($tables)) foreach ($tables as $table) {
@@ -123,7 +123,10 @@ if ($section === 'themes') {
         $manifest = json_decode((string)@file_get_contents($manifestFile), true);
         try { extension_validate_directory($dir->getPathname(), 'plugin', $name); } catch (Throwable $error) { $invalidExtensions[$name] = $error->getMessage(); continue; }
         $enabled = (int)($installed[$name]['enabled'] ?? 0);
-         $body .= '<section class="extension-row"><div><h2>'.e($manifest['title'] ?? $name).'</h2><p>'.e($name).' · '.e($manifest['version'] ?? '未知版本').' · '.e($manifest['description'] ?? '暂无说明').' · '.($enabled ? '已启用' : '已停用').'</p></div><div class="extension-actions"><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="'.($enabled ? 'disable' : 'enable').'"><button class="primary">'.($enabled ? '停用' : '启用').'</button></form><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="delete"><button>删除插件</button></form></div></section>';
+        try { $adminPath = is_array($manifest) ? extension_manifest_admin_path($manifest, $name) : null; } catch (Throwable $error) { $invalidExtensions[$name] = $error->getMessage(); continue; }
+        $body .= '<section class="extension-row"><div><h2>'.e($manifest['title'] ?? $name).'</h2><p>'.e($name).' · '.e($manifest['version'] ?? '未知版本').' · '.e($manifest['description'] ?? '暂无说明').' · '.($enabled ? '已启用' : '已停用').'</p></div><div class="extension-actions">';
+        if ($enabled && $adminPath !== null) $body .= '<a class="button" href="'.e($adminPath).'">管理</a>';
+        $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="'.($enabled ? 'disable' : 'enable').'"><button class="primary">'.($enabled ? '停用' : '启用').'</button></form><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="delete"><button>删除插件</button></form></div></section>';
     }
     if ($invalidExtensions) { $body .= '<section class="extension-errors"><h2>未通过检查的插件</h2>'; foreach ($invalidExtensions as $name => $reason) $body .= '<article><strong>'.e($name).'</strong><p>'.e($reason).'</p></article>'; $body .= '</section>'; }
     if (!$installed && !isset($name)) $body .= '<p class="admin-intro">尚未安装插件。</p>';

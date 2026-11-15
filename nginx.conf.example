@@ -66,6 +66,7 @@ server {
     location ^~ /__litebbs-uploads/ {
         internal;
         alias /srv/litebbs/uploads/;
+        add_header Cache-Control "private, no-store" always;
     }
 
     # Enable LITEBBS_X_ACCEL_REDIRECT=1 in PHP-FPM to let Nginx serve approved

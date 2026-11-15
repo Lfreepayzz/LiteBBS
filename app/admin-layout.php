@@ -14,6 +14,7 @@ $links = [
 <title><?=e($title)?> · <?=e($c['site'] ?? 'LiteBBS')?></title>
 <meta name="robots" content="noindex,follow">
 <link rel="stylesheet" href="/assets/css/admin.css">
+<link rel="stylesheet" href="/assets/css/admin-settings.css">
 </head>
 <body class="admin-body">
 <main class="admin-page"><div class="admin-shell"><aside class="admin-sidebar"><a class="admin-brand" href="/admin"><span class="admin-mark">R</span><span><?=e($c['site'] ?? 'LiteBBS')?></span></a><small>后台管理</small><?php foreach($links as $url => $label): ?><a class="admin-link<?=$requestPath === $url ? ' active' : ''?>" href="<?=e($url)?>"><?=e($label)?></a><?php endforeach; ?><a class="admin-back" href="/">返回社区</a><a class="admin-link<?=$requestPath === '/admin/extensions' ? ' active' : ''?>" href="/admin/extensions">程序更新</a></aside><section class="admin-workspace"><header class="admin-top"><div><p class="eyebrow">管理中心</p><h1><?=e($title)?></h1></div><span><?=e($user['username'] ?? '')?></span></header><div class="admin-content"><?=$body?></div></section></div></main>

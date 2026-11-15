@@ -4,9 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="<?= e(text_slice(strip_tags($description), 0, 220)) ?>">
-  <meta name="robots" content="<?= $indexable ? 'index,follow' : 'noindex,follow' ?>">
-  <title><?= e($title) ?> · <?= e($c['site'] ?? 'LiteBBS') ?></title>
+  <?= seo_head($title, $description, $indexable, $canonical, $c) ?>
   <?= theme_runtime_assets($safe, $isHomePage, $isTopicPage) ?>
   <?= plugin_stylesheets() ?><?= extension_stylesheets() ?>
   <?= extension_slot('head.assets', ['path'=>$requestPath, 'user'=>$user]) ?>

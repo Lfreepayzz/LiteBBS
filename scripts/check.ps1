@@ -11,6 +11,7 @@ function Require-Text([string]$RelativePath, [string]$Text, [string]$Message) {
 Require-Text 'index.php' 'Framework\Kernel' 'Application kernel is missing.'
 Require-Text 'index.php' 'app/route-dispatcher.php' 'Application routes must enter through the router adapter.'
 Require-Text 'index.php' 'home:v3:' 'Cursor-aware home feed cache key is missing.'
+Require-Text 'index.php' 'home-page:v1:' 'Anonymous homepage response cache is missing.'
 Require-Text 'app/reply-handler.php' 'notification_outbox' 'Replies must write notification work in their transaction.'
 if (([System.IO.File]::ReadAllText((Join-Path $root 'app/reply-handler.php'))).Contains('process_notification_outbox(1)')) { throw 'Web replies must not synchronously drain notification outbox.' }
 Require-Text 'app/notifications.php' 'FOR UPDATE SKIP LOCKED' 'Outbox processor must safely claim work.'
@@ -25,6 +26,7 @@ Require-Text 'plugins/zip-remote-attachments/plugin.json' '"schema": 1' 'Attachm
 Require-Text 'templates/aurora/theme.json' '"name": "aurora"' 'Independent theme example is missing.'
 Require-Text 'app/extension-framework.php' 'PluginContext' 'Versioned plugin API is missing.'
 Require-Text 'app/extensions-security.php' 'extension_class_name_valid' 'Plugin class validation helper is missing.'
+Require-Text 'app/extensions-security.php' 'extension_manifest_admin_path' 'Plugin admin path validation is missing.'
 Require-Text 'app/extensions-security.php' 'extension_v2_entry_file' 'Plugin entry containment validation is missing.'
 Require-Text 'app/extension-framework.php' '$entryFile = extension_v2_entry_file' 'Plugin runtime must resolve entries inside their plugin directory.'
 Require-Text 'index.php' 'LITEBBS_LEGACY_DISPATCH_COMPLETE' 'Post-kernel redirect handling is missing.'
@@ -43,17 +45,20 @@ Require-Text 'app/core.php' 'redis_cache_client' 'Shared Redis adapter is missin
 Require-Text 'app/core.php' 'function cache_versions' 'Batched cache version reads are missing.'
 Require-Text 'app/core.php' 'function remove_tree' 'Shared extension removal helper is missing.'
 Require-Text 'app/core.php' 'Redis cache single-flight' 'Distributed cache stampede protection is missing.'
+Require-Text 'app/core.php' 'stale-while-revalidate=30' 'Anonymous home and category response caching is missing.'
 Require-Text 'deployment/README.md' 'Redis latency' 'Shared Redis operations must be documented.'
 Require-Text 'scripts/flush-topic-views.php' 'hGetAll' 'Topic view aggregation worker is missing.'
 Require-Text 'scripts/flush-topic-views.php' 'topic_view_flush_batches' 'Topic view aggregation must be idempotent after worker failure.'
 Require-Text 'scripts/cleanup.php' 'topic_view_flush_batches' 'Topic view batch ledger cleanup is missing.'
 Require-Text 'app/plugin-topic.php' 'LOCK IN SHARE MODE' 'Topic creation must recheck category visibility inside its transaction.'
 Require-Text 'app/core.php' 'topic-view-seen' 'Topic view Redis deduplication is missing.'
+Require-Text 'app/core.php' 'function clear_session_cookie' 'Invalid sessions must clear their stale browser cookie.'
 Require-Text 'scripts/plugin-migrate.php' 'enabled,config_json' 'Plugin migration must register extensions disabled.'
 Require-Text 'scripts/migrate.php' 'VALUES(?,?,0,JSON_OBJECT()' 'Core migration must not enable plugin code before plugin migration.'
 Require-Text 'deployment/php-fpm.conf.example' 'pm.max_children' 'PHP-FPM capacity baseline is missing.'
 Require-Text 'deployment/opcache.ini.example' 'opcache.validate_timestamps=0' 'Production OPcache baseline is missing.'
 Require-Text 'deployment/README.md' 'queue age' 'Production queue monitoring is missing.'
+Require-Text 'scripts/load-test.js' 'public_home_cache_reads' 'Public homepage cache load scenario is missing.'
 
 $php = Get-Command php -ErrorAction SilentlyContinue
 if ($php) {

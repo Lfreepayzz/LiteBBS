@@ -15,6 +15,9 @@
     "ext-redis": "Required for shared sessions, cache and rate limits across web nodes."
   },
   "scripts": {
-    "test": "php tests/framework.php"
+    "test": [
+      "php tests/framework.php",
+      "php tests/seo.php"
+    ]
   }
 }

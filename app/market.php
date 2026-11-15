@@ -17,7 +17,7 @@ if (preg_match('~^/market/package/(\d+)$~',$path,$m)&&$method==='GET') {
     $item=h('SELECT package_file,sha256,kind,package_name FROM market_submissions WHERE id=? AND status="approved"',[(int)$m[1]])->fetch();
     if(!$item)fail(404,'审核通过的扩展不存在');
     if(!preg_match('/^[a-f0-9]{48}\.zip$/',$item['package_file']))fail(404,'扩展包不存在');$file=__DIR__.'/../market-packages/'.$item['package_file'];
-    if(!is_file($file)||!hash_equals($item['sha256'],hash_file('sha256',$file)))fail(410,'扩展包校验失败');
+    if(!is_file($file)||!market_package_hash_valid($file,(string)$item['sha256']))fail(410,'扩展包校验失败');
     $etag='"'.strtolower($item['sha256']).'"';header('ETag: '.$etag);header('Cache-Control: public, max-age=300');header('X-Content-Type-Options: nosniff');if(hash_equals($etag,(string)($_SERVER['HTTP_IF_NONE_MATCH']??''))){http_response_code(304);return;}header('Content-Type: application/zip');header('Content-Disposition: attachment; filename="'.basename($item['package_name']).'.zip"');if(getenv('LITEBBS_X_ACCEL_REDIRECT')==='1'){header('X-Accel-Redirect: /__litebbs-market-packages/'.rawurlencode((string)$item['package_file']));return;}header('Content-Length: '.filesize($file));readfile($file);return;
 }
 if ($path === '/market' && $method === 'GET') {
@@ -97,6 +97,13 @@ if($path==='/admin/market'&&in_array($method,['GET','POST'],true)){
 }
 
 function program_update_root(): string { return dirname(__DIR__); }
+function market_package_hash_valid(string $file, string $expectedHash): bool {
+    $modified=@filemtime($file);$size=@filesize($file);
+    if($modified===false||$size===false||!preg_match('/^[a-f0-9]{64}$/i',$expectedHash))return false;
+    $key='market-package-hash:v1:'.strtolower($expectedHash).':'.$modified.':'.$size;
+    $result=cached($key,300,static function()use($file,$expectedHash):array{$hash=hash_file('sha256',$file);return [$hash!==false&&hash_equals(strtolower($expectedHash),strtolower($hash))];});
+    return !empty($result[0]);
+}
 function program_update_package(): string { return config_directory().'/program-update.zip'; }
 function program_update_lock() {
     $file=config_directory().'/program-update.lock';$handle=@fopen($file,'c');if(!$handle||!flock($handle,LOCK_EX|LOCK_NB)){if($handle)fclose($handle);throw new RuntimeException('已有另一个更新任务正在执行');}return $handle;

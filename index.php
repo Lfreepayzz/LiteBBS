@@ -11,6 +11,7 @@ $markRequestTiming = static function (string $name, float $startedAt) use (&$req
 };
 $path = $request->path;
 require __DIR__.'/app/core.php';
+require __DIR__.'/app/seo.php';
 require __DIR__.'/app/extensions-security.php';
 require __DIR__.'/app/extension-framework.php';
 require __DIR__.'/app/theme-runtime.php';
@@ -31,6 +32,12 @@ if (!is_file(config_file()) && is_file($legacyConfig)) {
 }
 if (!is_file(install_lock_file()) && !in_array($path, ['/install', '/install.php', '/assets/css/install.css'], true)) redirect('/install');
 
+$rawRequestPath = parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
+if (in_array($method, ['GET','HEAD'], true) && preg_match('~^/(?:t/\d+(?:-[^/]+)?|c/\d+|u/[^/]+)/+$~', $rawRequestPath)) {
+    $query = parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY);
+    redirect(rtrim($rawRequestPath, '/').(is_string($query) && $query !== '' ? '?'.$query : ''), 301);
+}
+
 require __DIR__.'/app/plugin-runtime.php';
 define('LITEBBS_FRAMEWORK_DISPATCH',true);
 $kernel = new \LiteBBS\Framework\Kernel();
@@ -41,15 +48,49 @@ $kernel->router->add('POST', '~^/t/(?P<topicId>[0-9]+)/reply$~', static function
 });
 $kernel->router->add('GET', '~^/robots\.txt$~', static function (): \LiteBBS\Framework\Response {
     $config=load_config();
-    return (new \LiteBBS\Framework\Response("User-agent: *\nDisallow: /admin\nDisallow: /me\nSitemap: ".(string)$config['url']."/sitemap.xml\n"))->header('Content-Type','text/plain; charset=utf-8');
+    if (!seo_indexing_enabled()) return (new \LiteBBS\Framework\Response("User-agent: *\nDisallow: /\n"))->header('Content-Type','text/plain; charset=utf-8')->header('Cache-Control','public, max-age=3600');
+    return (new \LiteBBS\Framework\Response("User-agent: *\nDisallow: /admin\nDisallow: /me\nSitemap: ".rtrim((string)$config['url'],'/')."/sitemap.xml\n"))->header('Content-Type','text/plain; charset=utf-8')->header('Cache-Control','public, max-age=3600');
 });
 $kernel->router->add('GET', '~^/sitemap\.xml$~', static function (): \LiteBBS\Framework\Response {
+    if (!seo_indexing_enabled()) return (new \LiteBBS\Framework\Response('Not Found',404))->header('X-Robots-Tag','noindex');
     $base=rtrim((string)load_config()['url'],'/');
     $versions=cache_versions(['topics','categories']);
-    $key='sitemap:v1:'.(int)$versions['topics'].':'.(int)$versions['categories'].':'.hash('sha256',$base);
+    $key='sitemap:index:v2:'.(int)$versions['topics'].':'.(int)$versions['categories'].':'.hash('sha256',$base);
+    $document=cached($key, 3600, static function () use ($base): array {
+        $chunkSize=45000;
+        $topicCount=(int)h('SELECT COUNT(*) FROM topics t JOIN categories c ON c.id=t.category_id WHERE t.status="normal" AND c.is_visible=1')->fetchColumn();
+        $chunks=max(1,(int)ceil($topicCount/$chunkSize));
+        $xml='<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>'.e($base.'/sitemap-static.xml').'</loc></sitemap>';
+        for($page=1;$page<=$chunks;$page++)$xml.='<sitemap><loc>'.e($base.'/sitemap-topics-'.$page.'.xml').'</loc></sitemap>';
+        return [$xml.'</sitemapindex>'];
+    });
+    return (new \LiteBBS\Framework\Response($document[0]??''))->header('Content-Type','application/xml; charset=utf-8')->header('Cache-Control','public, max-age=3600');
+});
+$kernel->router->add('GET', '~^/sitemap-static\.xml$~', static function (): \LiteBBS\Framework\Response {
+    if (!seo_indexing_enabled()) return (new \LiteBBS\Framework\Response('Not Found',404))->header('X-Robots-Tag','noindex');
+    $base=rtrim((string)load_config()['url'],'/');
+    $versions=cache_versions(['topics','categories']);
+    $key='sitemap:static:v2:'.(int)$versions['topics'].':'.(int)$versions['categories'].':'.hash('sha256',$base);
     $document=cached($key, 3600, static function () use ($base): array {
         $xml='<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>'.e($base.'/').'</loc></url>';
-        $rows=h('SELECT t.id,t.last_post_at FROM topics t JOIN categories c ON c.id=t.category_id WHERE t.status="normal" AND c.is_visible=1 ORDER BY t.id DESC LIMIT 5000');
+        foreach(h('SELECT id FROM categories WHERE is_visible=1 ORDER BY id')->fetchAll() as $category)$xml.='<url><loc>'.e($base.'/c/'.(int)$category['id']).'</loc></url>';
+        return [$xml.'</urlset>'];
+    });
+    return (new \LiteBBS\Framework\Response($document[0]??''))->header('Content-Type','application/xml; charset=utf-8')->header('Cache-Control','public, max-age=3600');
+});
+$kernel->router->add('GET', '~^/sitemap-topics-(?P<page>[1-9][0-9]*)\.xml$~', static function (\LiteBBS\Framework\Request $request, \LiteBBS\Framework\Container $container, array $params): \LiteBBS\Framework\Response {
+    if (!seo_indexing_enabled()) return (new \LiteBBS\Framework\Response('Not Found',404))->header('X-Robots-Tag','noindex');
+    $base=rtrim((string)load_config()['url'],'/');
+    $page=(int)$params['page'];
+    $chunkSize=45000;
+    $topicCount=cached_topic_count('all');
+    if ($page > max(1,(int)ceil($topicCount/$chunkSize))) return new \LiteBBS\Framework\Response('Not Found',404);
+    $versions=cache_versions(['topics','categories']);
+    $key='sitemap:topics:v2:'.$page.':'.(int)$versions['topics'].':'.(int)$versions['categories'].':'.hash('sha256',$base);
+    $document=cached($key, 3600, static function () use ($base,$page,$chunkSize): array {
+        $offset=($page-1)*$chunkSize;
+        $xml='<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+        $rows=h('SELECT t.id,t.last_post_at FROM topics t JOIN categories c ON c.id=t.category_id WHERE t.status="normal" AND c.is_visible=1 ORDER BY t.id ASC LIMIT '.$chunkSize.' OFFSET '.$offset);
         while($topic=$rows->fetch())$xml.='<url><loc>'.e($base.'/t/'.(int)$topic['id']).'</loc><lastmod>'.e(substr((string)$topic['last_post_at'],0,10)).'</lastmod></url>';
         return [$xml.'</urlset>'];
     });
@@ -60,25 +101,42 @@ $kernel->router->add('GET', '~^/$~', static function (\LiteBBS\Framework\Request
     if(strlen($cursor)>256)fail(400,'分页游标无效');
     $page=max(1,(int)($request->query['page']??1));
     $versions=cache_versions(['topics','categories','home-feed','extension-read-pages','plugins']);
+    $anonymous=empty($_COOKIE[session_name()]);
+    $config=load_config();
+    $shellVersion=hash('sha256',implode("\0",[
+        (string)($config['site']??''),
+        (string)($config['url']??''),
+        (string)($config['theme']??'default'),
+        (string)($config['locale']??'zh-CN'),
+        json_encode($config['seo']??[], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?: '',
+    ]));
+    $pageCacheKey='home-page:v1:'.$page.':'.hash('sha256',$cursor).':'.$shellVersion.':'.(int)$versions['topics'].':'.(int)$versions['categories'].':'.(int)$versions['home-feed'].':'.(int)$versions['extension-read-pages'].':'.(int)$versions['plugins'];
+    $cursorData=null;
+    if($cursor!==''){$decoded=base64_decode(strtr($cursor,'-_','+/'),true);$candidate=is_string($decoded)?json_decode($decoded,true):null;if(!is_array($candidate)||!isset($candidate['p'],$candidate['d'],$candidate['i'])||!in_array((int)$candidate['p'],[0,1],true)||!is_string($candidate['d'])||!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/',$candidate['d'])||(int)$candidate['i']<1)fail(400,'分页游标无效');$cursorData=['p'=>(int)$candidate['p'],'d'=>$candidate['d'],'i'=>(int)$candidate['i']];}
+    if($anonymous&&($cachedPage=page_cache_read($pageCacheKey,30))!==null){
+        public_read_response_cache(null);
+        return new \LiteBBS\Framework\Response((string)($cachedPage[0]??''));
+    }
     $topicCount=cached_topic_count('all');
     $pages=max(1,(int)ceil($topicCount/30));
     if($page>$pages||$page>10000)fail(404,'页面不存在');
     if($page>11&&$cursor==='')fail(400,'旧分页链接过深，请从首页开始使用游标浏览');
     if($page>1&&$cursor==='')fail(400,'分页方式已更新，请从首页使用游标继续浏览');
-    $cursorData=null;
-    if($cursor!==''){$decoded=base64_decode(strtr($cursor,'-_','+/'),true);$candidate=is_string($decoded)?json_decode($decoded,true):null;if(!is_array($candidate)||!isset($candidate['p'],$candidate['d'],$candidate['i'])||!in_array((int)$candidate['p'],[0,1],true)||!is_string($candidate['d'])||!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/',$candidate['d'])||(int)$candidate['i']<1)fail(400,'分页游标无效');$cursorData=['p'=>(int)$candidate['p'],'d'=>$candidate['d'],'i'=>(int)$candidate['i']];}
     $key='home:v3:'.$page.':'.hash('sha256',$cursor).':'.(int)$versions['home-feed'].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'];
     $loadRows=static function()use($cursorData):array{$where='t.status="normal" AND c.is_visible=1';$args=[];if($cursorData){$where.=' AND (t.is_pinned<? OR (t.is_pinned=? AND (t.last_post_at<? OR (t.last_post_at=? AND t.id<?))))';array_push($args,$cursorData['p'],$cursorData['p'],$cursorData['d'],$cursorData['d'],$cursorData['i']);}$sql='SELECT t.id,t.title,t.reply_count,t.last_post_at,t.is_pinned,c.id category_id,c.title category,u.username FROM topics t JOIN categories c ON c.id=t.category_id JOIN users u ON u.id=t.user_id WHERE '.$where.' ORDER BY t.is_pinned DESC,t.last_post_at DESC,t.id DESC LIMIT 31';return h($sql,$args)->fetchAll();};
     $rows=$cursorData===null?cached($key,30,$loadRows):$loadRows();
     $hasMore=count($rows)>30;if($hasMore)array_pop($rows);$nextCursor='';if($hasMore&&$rows){$last=end($rows);$payload=json_encode(['p'=>(int)$last['is_pinned'],'d'=>(string)$last['last_post_at'],'i'=>(int)$last['id']]);$nextCursor=rtrim(strtr(base64_encode((string)$payload),'+/','-_'),'=');}
-    $viewer=current_user();
+    $viewer=$anonymous?null:current_user();
     $body='<header class="home-heading"><div><h1>讨论</h1><span>'.number_format($topicCount).' 个主题</span></div>'.($viewer?'<a class="feed-create" href="/new">发布主题</a>':'<a class="feed-create" href="/login">登录</a>').'</header><section class="topic-feed" aria-label="主题列表">';
     if(!$rows)$body.='<div class="topic-empty"><h2>暂无主题</h2><a href="'.($viewer?'/new':'/login').'">'.($viewer?'发布主题':'登录后发布').' →</a></div>';
     foreach($rows as $topic){$updated=(string)$topic['last_post_at'];$body.='<article class="topic topic-feed-item'.($topic['is_pinned']?' is-pinned':'').'">'.'<span class="topic-avatar" aria-hidden="true">'.e(text_slice($topic['username'],0,1)).'</span><div class="topic-feed-main"><h2><a href="/t/'.(int)$topic['id'].'">'.e($topic['title']).'</a></h2><div class="topic-feed-meta"><a class="topic-category" href="/c/'.(int)$topic['category_id'].'">'.e($topic['category']).'</a>'.($topic['is_pinned']?'<span class="topic-pinned">置顶</span>':'').'<a class="topic-author" href="/u/'.rawurlencode($topic['username']).'">'.e($topic['username']).'</a><span class="topic-activity">最后活跃</span><time datetime="'.e(str_replace(' ','T',substr($updated,0,19))).'">'.e(substr($updated,0,16)).'</time></div></div><a class="topic-replies" href="/t/'.(int)$topic['id'].'#replies" aria-label="'.(int)$topic['reply_count'].' 条回复"><strong>'.(int)$topic['reply_count'].'</strong><span>回复</span></a></article>';}
     ob_start();
     $body.='</section>';if($nextCursor!=='')$body.='<nav class="pagination"><a class="pagination-next" href="/?cursor='.rawurlencode($nextCursor).'">'.($cursor!==''?'加载更多':'继续浏览').'</a></nav>';
+    public_read_response_cache($viewer);
     page('首页',$body,'最新社区讨论',true);
-    return new \LiteBBS\Framework\Response((string)ob_get_clean());
+    $html=(string)ob_get_clean();
+    if($anonymous)page_cache_write($pageCacheKey,[$html],30);
+    return new \LiteBBS\Framework\Response($html);
 });
 // Extension routes are namespaced below /plugin, so non-plugin endpoints do not
 // boot extension code merely to populate the router.
@@ -98,7 +156,7 @@ if ($frameworkResponse instanceof \LiteBBS\Framework\Response) {
     $frameworkResponse->send(); exit;
 }
 define('LITEBBS_LEGACY_DISPATCH_COMPLETE', true);
-if ($path === '/logout' && $method === 'POST') { require_post(); if ($user = current_user()) h('DELETE FROM sessions WHERE id=? AND user_id=?', [$_SESSION['sid'], $user['id']]); start_session(); $_SESSION = []; session_destroy(); redirect('/'); }
+if ($path === '/logout' && $method === 'POST') { require_post(); if ($user = current_user()) h('DELETE FROM sessions WHERE id=? AND user_id=?', [$_SESSION['sid'], $user['id']]); start_session(); $_SESSION = []; session_destroy(); clear_session_cookie(); redirect('/'); }
 
 if ($path === '/register' && in_array($method, ['GET','POST'], true)) {
     if (setting('registration','1') !== '1') fail(403,'本站当前未开放注册。');

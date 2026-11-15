@@ -14,6 +14,9 @@ if ($method === 'POST') {
     $category = (int)($_POST['category'] ?? 0);
     $categoryIds = array_map('intval', array_column($categories, 'id'));
     if (text_length($title) < 4 || text_length($title) > 120 || text_length($body) < 5 || text_length($body) > 12000 || !in_array($category, $categoryIds, true)) fail(400, '标题、正文或分区无效');
+    // Upload inspection runs before the transaction so extension file work does
+    // not extend category and quota locks during topic creation.
+    extension_event_sync('topic.create.preflight', ['post'=>$_POST, 'files'=>$_FILES, 'user'=>$user]);
     $pdo = db();
     $pdo->beginTransaction();
     try {

@@ -76,6 +76,9 @@ final class Response {
     }
 
     public function header(string $name, string $value): self {
+        if (!preg_match('/^[!#$%&\'*+.^_`|~0-9A-Za-z-]+$/', $name) || preg_match('/[\r\n]/', $value)) {
+            throw new \InvalidArgumentException('Invalid response header.');
+        }
         $this->headers[$name] = $value;
         return $this;
     }

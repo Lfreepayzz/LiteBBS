@@ -3,6 +3,15 @@ declare(strict_types=1);
 
 const LITEBBS_VERSION = '1.0.0';
 
+function extension_manifest_admin_path(array $manifest, string $id): ?string {
+    if (!array_key_exists('admin_path', $manifest)) return null;
+    $path = $manifest['admin_path'];
+    if (!is_string($path) || !preg_match('~^/plugin/'.preg_quote($id, '~').'(?:/[a-z][a-z0-9/_-]{0,127})?$~', $path)) {
+        throw new RuntimeException('Invalid plugin admin path.');
+    }
+    return $path;
+}
+
 function extension_validate_directory(string $directory, string $kind, string $name): void {
     static $validated = [];
     if (!in_array($kind, ['plugin', 'theme'], true) || !preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $name) || !is_dir($directory)) {
@@ -71,6 +80,7 @@ function extension_validate_v2_plugin(string $directory, string $name): void {
     $tables = $manifest['database_tables'] ?? [];
     if (!is_array($tables) || count($tables) > 100 || count($tables) !== count(array_unique($tables))) throw new RuntimeException('新插件 database_tables 必须是无重复的有效数组');
     foreach ($tables as $table) if (!is_string($table) || !preg_match('/^'.preg_quote($prefix, '/').'[a-z][a-z0-9_]{0,55}$/', $table)) throw new RuntimeException('新插件数据表必须以 '.$prefix.' 开头');
+    extension_manifest_admin_path($manifest, $name);
     $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
     $count = 0;
     foreach ($files as $file) {

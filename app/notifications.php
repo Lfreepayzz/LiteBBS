@@ -10,7 +10,9 @@ function process_notification_outbox(int $limit = 1): int {
         try{
             $event=h('SELECT id,topic_id,post_id,actor_id,fanout_cursor FROM notification_outbox WHERE processed_at IS NULL ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
             if(!$event){$db->commit();break;}
-            $recipients=h('SELECT user_id FROM (SELECT user_id FROM topic_subscriptions WHERE topic_id=? AND user_id>? UNION SELECT user_id FROM topics WHERE id=? AND user_id>? UNION SELECT user_id FROM posts WHERE id=? AND user_id>?) candidates WHERE user_id<>? ORDER BY user_id LIMIT 501',[(int)$event['topic_id'],(int)$event['fanout_cursor'],(int)$event['topic_id'],(int)$event['fanout_cursor'],(int)$event['post_id'],(int)$event['fanout_cursor'],(int)$event['actor_id']])->fetchAll(PDO::FETCH_COLUMN);
+            // Fan out to subscribers, the topic author, and every prior participant.
+            // The cursor is a user ID so batches remain deterministic across workers.
+            $recipients=h('SELECT user_id FROM (SELECT user_id FROM topic_subscriptions WHERE topic_id=? AND user_id>? UNION SELECT user_id FROM topics WHERE id=? AND user_id>? UNION SELECT user_id FROM posts WHERE topic_id=? AND status="normal" AND user_id>?) candidates WHERE user_id<>? ORDER BY user_id LIMIT 501',[(int)$event['topic_id'],(int)$event['fanout_cursor'],(int)$event['topic_id'],(int)$event['fanout_cursor'],(int)$event['topic_id'],(int)$event['fanout_cursor'],(int)$event['actor_id']])->fetchAll(PDO::FETCH_COLUMN);
             $hasMore=count($recipients)>500;
             if($hasMore)array_pop($recipients);
             if($recipients){

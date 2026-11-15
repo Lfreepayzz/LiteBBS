@@ -74,9 +74,16 @@ if ($method === 'POST') {
     $registration = (string)($_POST['registration'] ?? '1');
     $interval = (int)($_POST['post_interval'] ?? 0);
     $locale = (string)($_POST['locale'] ?? 'zh-CN');
-    if (text_length($site) < 2 || text_length($site) > 100 || !in_array($registration, ['0', '1'], true) || $interval < 0 || $interval > 3600 || !in_array($locale, ['zh-CN', 'en-US'], true)) fail(400, '设置值无效');
+    $seoHomeDescription = trim((string)($_POST['seo_home_description'] ?? ''));
+    $seoIndexing = (string)($_POST['seo_indexing'] ?? '1');
+    $seoVerification = [];
+    foreach (['google','bing','baidu','yandex','naver'] as $engine) $seoVerification[$engine] = trim((string)($_POST['seo_'.$engine.'_verification'] ?? ''));
+    if (text_length($site) < 2 || text_length($site) > 100 || !in_array($registration, ['0', '1'], true) || $interval < 0 || $interval > 3600 || !in_array($locale, ['zh-CN', 'en-US'], true) || text_length($seoHomeDescription) > 220 || !in_array($seoIndexing, ['0', '1'], true)) fail(400, '设置值无效');
+    foreach ($seoVerification as $value) if ($value !== '' && (!preg_match('/^[\x21-\x7E]{1,512}$/', $value) || strlen($value) > 512)) fail(400, '站长平台验证码格式无效');
     $config['site'] = $site;
     $config['locale'] = $locale;
+    $config['seo'] = ['home_description'=>$seoHomeDescription, 'indexing'=>(int)$seoIndexing];
+    foreach ($seoVerification as $engine=>$value) $config['seo'][$engine.'_verification'] = $value;
     try { write_config($config); } catch (Throwable $error) { fail(500, '配置写入失败'); }
     foreach (['registration' => $registration, 'post_interval' => (string)$interval] as $key => $value) {
         h('INSERT INTO settings(setting_key,setting_value,updated_at) VALUES(?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_at=VALUES(updated_at)', [$key, $value]);
@@ -99,10 +106,27 @@ if ($path === '/admin/users') {
 
 $settings = [];
 foreach (h('SELECT setting_key,setting_value FROM settings WHERE setting_key IN ("registration","post_interval")')->fetchAll() as $row) $settings[$row['setting_key']] = $row['setting_value'];
-$body = form('/admin/settings', '保存设置',
+$seo = is_array($config['seo'] ?? null) ? $config['seo'] : [];
+$body = '<form class="admin-settings-form" method="post" action="/admin/settings"><input type="hidden" name="csrf" value="'.e(csrf()).'">'.
+    '<section class="settings-section"><div class="settings-section-heading"><span>01</span><div><h3>社区信息</h3><p>用于浏览器标题、站点标识和默认界面语言。</p></div></div><div class="settings-grid settings-grid-compact">'.
     '<label>站点名称<input name="site" maxlength="100" value="'.e($config['site'] ?? 'LiteBBS').'" required></label>'.
-    '<label>注册开关<select name="registration"><option value="1"'.(($settings['registration'] ?? '1') === '1' ? ' selected' : '').'>开放</option><option value="0"'.(($settings['registration'] ?? '1') === '0' ? ' selected' : '').'>关闭</option></select></label>'.
-    '<label>发帖间隔（秒）<input name="post_interval" type="number" min="0" max="3600" value="'.(int)($settings['post_interval'] ?? 0).'"></label>'.
-    '<label>默认语言<select name="locale"><option'.(($config['locale'] ?? 'zh-CN') === 'zh-CN' ? ' selected' : '').'>zh-CN</option><option'.(($config['locale'] ?? 'zh-CN') === 'en-US' ? ' selected' : '').'>en-US</option></select></label>');
+    '<label>默认语言<select name="locale"><option value="zh-CN"'.(($config['locale'] ?? 'zh-CN') === 'zh-CN' ? ' selected' : '').'>简体中文</option><option value="en-US"'.(($config['locale'] ?? 'zh-CN') === 'en-US' ? ' selected' : '').'>English</option></select></label>'.
+    '</div></section>'.
+    '<section class="settings-section"><div class="settings-section-heading"><span>02</span><div><h3>社区行为</h3><p>控制新成员进入与公开内容发布的节奏。</p></div></div><div class="settings-grid settings-grid-compact">'.
+    '<label>注册开关<select name="registration"><option value="1"'.(($settings['registration'] ?? '1') === '1' ? ' selected' : '').'>开放注册</option><option value="0"'.(($settings['registration'] ?? '1') === '0' ? ' selected' : '').'>暂停注册</option></select><small>关闭后，现有会员仍可正常登录和使用。</small></label>'.
+    '<label>发帖间隔（秒）<input name="post_interval" type="number" min="0" max="3600" value="'.(int)($settings['post_interval'] ?? 0).'" inputmode="numeric"><small>设为 0 表示不额外限制；最大 3600 秒。</small></label>'.
+    '</div></section>'.
+    '<section class="settings-section"><div class="settings-section-heading"><span>03</span><div><h3>搜索展示</h3><p>设置首页摘要和搜索引擎公开收录策略。</p></div></div><div class="settings-grid">'.
+    '<label class="settings-wide">首页 SEO 描述<textarea name="seo_home_description" maxlength="220" rows="4" placeholder="用于首页搜索结果摘要与社交分享">'.e($seo['home_description'] ?? '').'</textarea><small>建议 50-160 个字符；主题和分区页仍使用各自内容摘要。</small></label>'.
+    '<label>搜索引擎收录<select name="seo_indexing"><option value="1"'.((string)($seo['indexing'] ?? '1') !== '0' ? ' selected' : '').'>允许公开内容被收录</option><option value="0"'.((string)($seo['indexing'] ?? '1') === '0' ? ' selected' : '').'>全站暂不收录</option></select><small>暂停收录会在公开页输出 noindex，不会隐藏站内内容。</small></label>'.
+    '</div></section>'.
+    '<section class="settings-section settings-verification"><div class="settings-section-heading"><span>04</span><div><h3>站长平台验证</h3><p>可选。只填写各平台提供的验证码内容，不要粘贴完整 meta 标签。</p></div></div><div class="settings-grid">'.
+    '<label>Google Search Console<input name="seo_google_verification" maxlength="512" value="'.e($seo['google_verification'] ?? '').'" autocomplete="off"></label>'.
+    '<label>Bing Webmaster Tools<input name="seo_bing_verification" maxlength="512" value="'.e($seo['bing_verification'] ?? '').'" autocomplete="off"></label>'.
+    '<label>百度搜索资源平台<input name="seo_baidu_verification" maxlength="512" value="'.e($seo['baidu_verification'] ?? '').'" autocomplete="off"></label>'.
+    '<label>Yandex Webmaster<input name="seo_yandex_verification" maxlength="512" value="'.e($seo['yandex_verification'] ?? '').'" autocomplete="off"></label>'.
+    '<label class="settings-wide">Naver Search Advisor<input name="seo_naver_verification" maxlength="512" value="'.e($seo['naver_verification'] ?? '').'" autocomplete="off"></label>'.
+    '</div></section>'.
+    '<footer class="settings-actions"><p><strong>安全说明</strong> 配置会写入私有目录；保存不会修改模板、插件配置或现有内容。</p><button class="primary" type="submit">保存更改</button></footer></form>';
 page('站点设置', $body);
 return;

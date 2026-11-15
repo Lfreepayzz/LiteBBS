@@ -7,6 +7,7 @@ final class ZipRemoteAttachmentsPlugin implements LiteBBSPlugin
     {
         $context->assets()->css('assets/style.css');
         $context->slots()->add('topic.create.fields', static fn(array $view): string => '<details class="plugin-attachment-fields"><summary><span><strong>添加 ZIP / 远程附件</strong><small>可选，仅支持一个 ZIP 文件或一个远程 ZIP 地址</small></span><span class="plugin-attachment-badge">ZIP ONLY</span></summary><div class="plugin-attachment-content"><div class="plugin-attachment-heading"><div><h2>选择附件来源</h2><p>本地上传和远程地址二选一，远程文件必须使用 HTTPS。</p></div></div><div class="plugin-attachment-sources"><label><span>本地 ZIP 文件</span><input type="file" name="plugin_zip_attachment" accept=".zip,application/zip,application/x-zip-compressed"><small>单个文件最大 10 MiB</small></label><span class="plugin-attachment-or" aria-hidden="true">或</span><label><span>远程 ZIP 地址</span><input type="url" name="plugin_remote_attachment" maxlength="2048" placeholder="https://example.com/file.zip"><small>仅接受以 .zip 结尾的 HTTPS 地址</small></label></div><div class="plugin-attachment-access"><label><span>下载权限</span><select name="plugin_attachment_access"><option value="login">登录后下载</option><option value="reply">回复主题后下载</option><option value="points">积分购买后下载</option></select><small>下载者需满足所选条件。</small></label><label><span>积分价格</span><input type="number" name="plugin_attachment_points" min="1" max="100000" value="1" inputmode="numeric"><small>仅“积分购买后下载”时扣除积分。</small></label></div></div></details>');
+        $context->events()->listen('topic.create.preflight', static function (array $event): void { zip_attachment_prepare_create($event); });
         $context->events()->listen('topic.created', static function (array $event): void { zip_attachment_create($event); });
         $context->events()->listen('post.created', static function (array $event): void { zip_attachment_grant_reply($event); });
         $context->preloads()->add('post.after-body', static function (array $view): void { zip_attachment_preload($view); });
@@ -25,7 +26,7 @@ final class ZipRemoteAttachmentsPlugin implements LiteBBSPlugin
 
 function &zip_attachment_request_cache(): array
 {
-    static $cache = ['files'=>[], 'grants'=>[]];
+    static $cache = ['files'=>[], 'grants'=>[], 'prepared'=>[]];
     return $cache;
 }
 
@@ -40,7 +41,13 @@ function zip_attachment_preload(array $view): void
     if ($viewer) foreach (h('SELECT attachment_id FROM plg_zip_remote_attachments_grants WHERE user_id=? AND attachment_id IN (SELECT id FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active")', array_merge([(int)$viewer['id']], $ids))->fetchAll(PDO::FETCH_COLUMN) as $attachmentId) $cache['grants'][(int)$attachmentId] = true;
 }
 
-function zip_attachment_create(array $event): void
+function zip_attachment_prepare_key(array $event): string
+{
+    $file=$event['files']['plugin_zip_attachment']??[];
+    return hash('sha256',(string)($event['user']['id']??'').'|'.(string)($file['tmp_name']??'').'|'.(string)($event['post']['plugin_remote_attachment']??''));
+}
+
+function zip_attachment_prepare_create(array $event): void
 {
     if (empty($event['post']) || empty($event['user']['id'])) return;
     $file = $event['files']['plugin_zip_attachment'] ?? null;
@@ -50,7 +57,7 @@ function zip_attachment_create(array $event): void
     $mode = (string)($event['post']['plugin_attachment_access'] ?? 'login');
     $points = (int)($event['post']['plugin_attachment_points'] ?? 0);
     if (!in_array($mode, ['login','reply','points'], true) || ($mode === 'points' && ($points < 1 || $points > 100000))) fail(400, '附件访问设置无效');
-    $kind = 'remote'; $storage = null; $name = ''; $size = null; $hash = null;
+    $kind = 'remote'; $name = ''; $size = null; $hash = null;
     if ($remote !== '') {
         $parts = parse_url($remote);
         if (!zip_attachment_remote_url_valid($remote)) fail(400, '远程附件必须是可公开访问的 HTTPS ZIP 地址');
@@ -61,14 +68,29 @@ function zip_attachment_create(array $event): void
         $mime = (new finfo(FILEINFO_MIME_TYPE))->file((string)$file['tmp_name']) ?: '';
         if ($name === '' || text_length($name) > 255 || strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== 'zip' || !in_array($mime, ['application/zip','application/x-zip-compressed'], true)) fail(400, '只能上传 ZIP 文件');
         zip_attachment_validate_archive((string)$file['tmp_name'], (int)$file['size']);
-        zip_attachment_check_user_quota((int)$event['user']['id'], (int)$file['size']);
+        $kind = 'upload'; $size = (int)$file['size']; $hash = hash_file('sha256', (string)$file['tmp_name']);
+        if ($hash === false) fail(400, 'ZIP 文件校验失败');
+    }
+    $cache =& zip_attachment_request_cache();
+    $cache['prepared'][zip_attachment_prepare_key($event)]=['kind'=>$kind,'remote'=>$remote,'name'=>$name,'size'=>$size,'hash'=>$hash,'mode'=>$mode,'points'=>$points,'tmp_name'=>$kind==='upload'?(string)$file['tmp_name']:''];
+}
+
+function zip_attachment_create(array $event): void
+{
+    $cache =& zip_attachment_request_cache();
+    $key=zip_attachment_prepare_key($event);
+    if (!isset($cache['prepared'][$key])) zip_attachment_prepare_create($event);
+    $prepared=$cache['prepared'][$key]??null;
+    if (!is_array($prepared)) return;
+    $storage=null;
+    if ($prepared['kind'] === 'upload') {
+        zip_attachment_check_user_quota((int)$event['user']['id'], (int)$prepared['size']);
         $directory = dirname(__DIR__, 3).'/uploads/plugin-zip';
         if (!is_dir($directory) && !mkdir($directory, 0750, true)) fail(500, '插件附件目录不可用');
-        $storage = bin2hex(random_bytes(32)); $target = $directory.'/'.$storage;
-        if (!move_uploaded_file((string)$file['tmp_name'], $target)) fail(500, 'ZIP 文件保存失败');
-        $kind = 'upload'; $size = (int)$file['size']; $hash = hash_file('sha256', $target);
+        $storage = bin2hex(random_bytes(32));
+        if (!move_uploaded_file((string)$prepared['tmp_name'], $directory.'/'.$storage)) fail(500, 'ZIP 文件保存失败');
     }
-    h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6))', [(int)$event['post_id'], (int)$event['user']['id'], $kind, $storage, $remote ?: null, $name, $size, $hash, $mode, $mode === 'points' ? $points : 0]);
+    h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6))', [(int)$event['post_id'], (int)$event['user']['id'], $prepared['kind'], $storage, $prepared['remote'] ?: null, $prepared['name'], $prepared['size'], $prepared['hash'], $prepared['mode'], $prepared['mode'] === 'points' ? $prepared['points'] : 0]);
 }
 
 function zip_attachment_grant_reply(array $event): void
@@ -112,8 +134,8 @@ function zip_attachment_download(int $id): \LiteBBS\Framework\Response
     $path = dirname(__DIR__, 3).'/uploads/plugin-zip/'.basename((string)$file['storage_name']);
     if (!is_file($path)) fail(404, '附件文件不存在');
     $downloadName=rawurlencode((string)$file['original_name']);
-    if (getenv('LITEBBS_X_ACCEL_REDIRECT') === '1') return (new \LiteBBS\Framework\Response(''))->header('Content-Type','application/zip')->header('X-Content-Type-Options','nosniff')->header('Content-Disposition',"attachment; filename*=UTF-8''".$downloadName)->header('X-Accel-Redirect','/__litebbs-uploads/plugin-zip/'.rawurlencode(basename((string)$file['storage_name'])));
-    header('Content-Type: application/zip'); header('X-Content-Type-Options: nosniff'); header("Content-Disposition: attachment; filename*=UTF-8''".$downloadName); header('Content-Length: '.filesize($path)); readfile($path);
+    if (getenv('LITEBBS_X_ACCEL_REDIRECT') === '1') return (new \LiteBBS\Framework\Response(''))->header('Content-Type','application/zip')->header('Cache-Control','private, no-store')->header('Pragma','no-cache')->header('X-Content-Type-Options','nosniff')->header('Content-Disposition',"attachment; filename*=UTF-8''".$downloadName)->header('X-Accel-Redirect','/__litebbs-uploads/plugin-zip/'.rawurlencode(basename((string)$file['storage_name'])));
+    header('Content-Type: application/zip'); header('Cache-Control: private, no-store'); header('Pragma: no-cache'); header('X-Content-Type-Options: nosniff'); header("Content-Disposition: attachment; filename*=UTF-8''".$downloadName); header('Content-Length: '.filesize($path)); readfile($path);
     return new \LiteBBS\Framework\Response('');
 }
 

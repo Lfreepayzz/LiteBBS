@@ -33,6 +33,15 @@ export const options = {
       maxVUs: 100,
       exec: 'hotTopicRead',
     },
+    public_home_cache_reads: {
+      executor: 'constant-arrival-rate',
+      rate: 100,
+      timeUnit: '1s',
+      duration: '5m',
+      preAllocatedVUs: 20,
+      maxVUs: 100,
+      exec: 'publicHomeRead',
+    },
   },
   thresholds: {
     http_req_failed: ['rate<0.01'],
@@ -55,4 +64,12 @@ export default function () {
 export function hotTopicRead() {
   const response = http.get(`${base}/t/${hotTopicId}`);
   check(response, { 'hot topic responds successfully': (r) => r.status === 200 });
+}
+
+export function publicHomeRead() {
+  const response = http.get(`${base}/`, { cookies: {} });
+  check(response, {
+    'public home responds successfully': (r) => r.status === 200,
+    'public home is cacheable': (r) => (r.headers['Cache-Control'] || '').includes('s-maxage=30'),
+  });
 }
