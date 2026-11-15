@@ -2,6 +2,11 @@
 
 LiteBBS 是一个轻量 PHP + MySQL/ 论坛程序，提供主题讨论、分区管理、用户管理、内容审核、审计日志、模板和扩展管理功能。
 
+## 演示
+
+[演示地址](https://bolgk.eu.org/)。
+
+
 ## 截图
 
 ![LiteBBS Screenshot 1](https://raw.githubusercontent.com/Lfreepayzz/LiteBBS/refs/heads/main/img/1.png)
