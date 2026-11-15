@@ -68,6 +68,9 @@ function extension_validate_v2_plugin(string $directory, string $name): void {
     $class = is_array($manifest) ? (string)($manifest['class'] ?? '') : '';
     if (!is_array($manifest) || ($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $name || !preg_match('/^\d+\.\d+\.\d+$/', (string)($manifest['version'] ?? '')) || !is_array($manifest['requires'] ?? null) || !extension_supports_core((string)($manifest['requires']['core'] ?? '')) || !extension_v2_entry_file($directory, $entry) || !extension_class_name_valid($class)) throw new RuntimeException('新插件清单无效');
     $prefix = 'plg_'.str_replace('-', '_', $name).'_';
+    $tables = $manifest['database_tables'] ?? [];
+    if (!is_array($tables) || count($tables) > 100 || count($tables) !== count(array_unique($tables))) throw new RuntimeException('新插件 database_tables 必须是无重复的有效数组');
+    foreach ($tables as $table) if (!is_string($table) || !preg_match('/^'.preg_quote($prefix, '/').'[a-z][a-z0-9_]{0,55}$/', $table)) throw new RuntimeException('新插件数据表必须以 '.$prefix.' 开头');
     $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
     $count = 0;
     foreach ($files as $file) {
@@ -143,22 +146,25 @@ function extension_theme_runtime_valid(string &$directory, string &$name): bool 
 }
 
 function extension_secure_runtime_file(string $root, string $relative): ?string {
+    static $resolvedCache = [];
+    $cacheKey = $root."\0".$relative;
+    if (array_key_exists($cacheKey, $resolvedCache)) return $resolvedCache[$cacheKey];
     if ($relative === '' || str_contains($relative, "\0") || str_contains($relative, "\n") || str_contains($relative, "\r")) return null;
     $rootReal = realpath($root);
     $relative = str_replace('\\', '/', $relative);
-    if ($rootReal === false || !is_dir($rootReal) || str_starts_with($relative, '/') || preg_match('~(?:^|/)\.\.(?:/|$)~', $relative)) return null;
+    if ($rootReal === false || !is_dir($rootReal) || str_starts_with($relative, '/') || preg_match('~(?:^|/)\.\.(?:/|$)~', $relative)) return $resolvedCache[$cacheKey] = null;
     $parts = preg_split('~/+~', $relative, -1, PREG_SPLIT_NO_EMPTY);
-    if (!$parts) return null;
+    if (!$parts) return $resolvedCache[$cacheKey] = null;
     $current = $rootReal;
     foreach ($parts as $part) {
-        if ($part === '.' || $part === '' || is_link($current.'/'.$part)) return null;
+        if ($part === '.' || $part === '' || is_link($current.'/'.$part)) return $resolvedCache[$cacheKey] = null;
         $current .= DIRECTORY_SEPARATOR.$part;
     }
     $resolved = realpath($current);
-    if ($resolved === false || !is_file($resolved) || is_link($resolved)) return null;
+    if ($resolved === false || !is_file($resolved) || is_link($resolved)) return $resolvedCache[$cacheKey] = null;
     $prefix = rtrim($rootReal, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
-    if (!str_starts_with($resolved, $prefix)) return null;
-    return $resolved;
+    if (!str_starts_with($resolved, $prefix)) return $resolvedCache[$cacheKey] = null;
+    return $resolvedCache[$cacheKey] = $resolved;
 }
 
 function extension_supports_core(string $range): bool {

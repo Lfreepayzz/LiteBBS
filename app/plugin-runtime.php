@@ -56,16 +56,35 @@ function plugin_asset_dispatch(array $context): bool {
     $style = rawurldecode($match[2]);
     $plugin = plugin_runtime_load()[$name] ?? null;
     $allowed = is_array($plugin) && in_array($style, $plugin['_styles'] ?? [], true);
+    // Assets are the only legacy-plugin path that needs the extension registry.
+    // Avoid booting plugins for every ordinary application request.
     if (!$allowed && function_exists('extension_runtime_load')) {
-        extension_runtime_load();
-        foreach (extension_registry()['assets'] as $asset) if ($asset['plugin'] === $name && $asset['path'] === $style && $asset['type'] === 'css') { $allowed = true; break; }
+        $records = extension_enabled_plugins();
+        foreach ($records as $record) {
+            if (($record['name'] ?? '') !== $name) continue;
+            $manifest = extension_plugin_manifest($name);
+            if (is_array($manifest) && ($manifest['schema'] ?? null) === 1 && ($manifest['id'] ?? '') === $name) {
+                $assets = extension_manifest_assets($manifest);
+                $allowed = is_array($assets) && in_array($style, $assets, true);
+            } else {
+                extension_runtime_load($name);
+                foreach (extension_registry()['assets'] as $asset) if ($asset['plugin'] === $name && $asset['path'] === $style && $asset['type'] === 'css') { $allowed = true; break; }
+            }
+            break;
+        }
     }
     if (!$allowed) return false;
     $file = extension_secure_runtime_file(dirname(__DIR__).'/plugins/'.$name, $style);
     if ($file === null) return false;
     if (headers_sent()) return false;
-    header('Content-Type: text/css; charset=utf-8');
+    $etag = '"'.asset_version($file).'"';
+    header('ETag: '.$etag);
     header('Cache-Control: public, max-age=31536000, immutable');
+    if (hash_equals($etag, (string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''))) {
+        http_response_code(304);
+        return true;
+    }
+    header('Content-Type: text/css; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
     readfile($file);
     return true;

@@ -6,7 +6,7 @@ final class ZipRemoteAttachmentsPlugin implements LiteBBSPlugin
     public function boot(PluginContext $context): void
     {
         $context->assets()->css('assets/style.css');
-        $context->slots()->add('topic.create.fields', static fn(array $view): string => '<details class="plugin-attachment-fields"><summary><span><strong>添加 ZIP / 远程附件</strong><small>可选，仅支持 ZIP 文件</small></span><span class="plugin-attachment-badge">ZIP ONLY</span></summary><div class="plugin-attachment-content"><label>本地 ZIP 文件<input type="file" name="plugin_zip_attachment" accept=".zip,application/zip,application/x-zip-compressed"></label><label>远程 ZIP 地址<input type="url" name="plugin_remote_attachment" maxlength="2048" placeholder="https://example.com/file.zip"></label><label>下载权限<select name="plugin_attachment_access"><option value="login">登录后下载</option><option value="reply">回复主题后下载</option><option value="points">积分购买后下载</option></select></label><label>积分价格<input type="number" name="plugin_attachment_points" min="1" max="100000" value="1"></label></div></details>');
+        $context->slots()->add('topic.create.fields', static fn(array $view): string => '<details class="plugin-attachment-fields"><summary><span><strong>添加 ZIP / 远程附件</strong><small>可选，仅支持一个 ZIP 文件或一个远程 ZIP 地址</small></span><span class="plugin-attachment-badge">ZIP ONLY</span></summary><div class="plugin-attachment-content"><div class="plugin-attachment-heading"><div><h2>选择附件来源</h2><p>本地上传和远程地址二选一，远程文件必须使用 HTTPS。</p></div></div><div class="plugin-attachment-sources"><label><span>本地 ZIP 文件</span><input type="file" name="plugin_zip_attachment" accept=".zip,application/zip,application/x-zip-compressed"><small>单个文件最大 10 MiB</small></label><span class="plugin-attachment-or" aria-hidden="true">或</span><label><span>远程 ZIP 地址</span><input type="url" name="plugin_remote_attachment" maxlength="2048" placeholder="https://example.com/file.zip"><small>仅接受以 .zip 结尾的 HTTPS 地址</small></label></div><div class="plugin-attachment-access"><label><span>下载权限</span><select name="plugin_attachment_access"><option value="login">登录后下载</option><option value="reply">回复主题后下载</option><option value="points">积分购买后下载</option></select><small>下载者需满足所选条件。</small></label><label><span>积分价格</span><input type="number" name="plugin_attachment_points" min="1" max="100000" value="1" inputmode="numeric"><small>仅“积分购买后下载”时扣除积分。</small></label></div></div></details>');
         $context->events()->listen('topic.created', static function (array $event): void { zip_attachment_create($event); });
         $context->events()->listen('post.created', static function (array $event): void { zip_attachment_grant_reply($event); });
         $context->preloads()->add('post.after-body', static function (array $view): void { zip_attachment_preload($view); });
@@ -53,13 +53,14 @@ function zip_attachment_create(array $event): void
     $kind = 'remote'; $storage = null; $name = ''; $size = null; $hash = null;
     if ($remote !== '') {
         $parts = parse_url($remote);
-        if (!is_array($parts) || strtolower((string)($parts['scheme'] ?? '')) !== 'https' || empty($parts['host']) || isset($parts['user'],$parts['pass']) || !preg_match('/\.zip$/i', (string)($parts['path'] ?? ''))) fail(400, '远程附件必须是 HTTPS ZIP 地址');
+        if (!zip_attachment_remote_url_valid($remote)) fail(400, '远程附件必须是可公开访问的 HTTPS ZIP 地址');
         $name = basename((string)$parts['path']);
     } else {
         if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string)$file['tmp_name']) || (int)$file['size'] < 1 || (int)$file['size'] > 10485760) fail(400, 'ZIP 文件无效或超过 10 MiB');
         $name = trim(basename(str_replace('\\', '/', (string)$file['name'])));
         $mime = (new finfo(FILEINFO_MIME_TYPE))->file((string)$file['tmp_name']) ?: '';
         if ($name === '' || text_length($name) > 255 || strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== 'zip' || !in_array($mime, ['application/zip','application/x-zip-compressed'], true)) fail(400, '只能上传 ZIP 文件');
+        zip_attachment_validate_archive((string)$file['tmp_name'], (int)$file['size']);
         zip_attachment_check_user_quota((int)$event['user']['id'], (int)$file['size']);
         $directory = dirname(__DIR__, 3).'/uploads/plugin-zip';
         if (!is_dir($directory) && !mkdir($directory, 0750, true)) fail(500, '插件附件目录不可用');
@@ -122,7 +123,47 @@ function zip_attachment_external_download(int $id): \LiteBBS\Framework\Response
     if (!$viewer) redirect('/login');
     $file = zip_attachment_available_to($id, $viewer);
     if ($file['source_kind'] !== 'remote') fail(400, '该附件不是远程附件');
-    redirect((string)$file['remote_url'], 303);
+    $url = (string)$file['remote_url'];
+    if (!zip_attachment_remote_url_valid($url)) fail(400, '远程附件地址无效');
+    redirect_external_https($url, 303);
+}
+
+function zip_attachment_validate_archive(string $path, int $compressedBytes): void
+{
+    $zip = new ZipArchive();
+    if ($zip->open($path, ZipArchive::CHECKCONS) !== true) fail(400, 'ZIP 文件结构无效');
+    try {
+        if ($zip->numFiles < 1 || $zip->numFiles > 1000) fail(400, 'ZIP 文件数量超出限制');
+        $total = 0;
+        $names = [];
+        for ($index = 0; $index < $zip->numFiles; $index++) {
+            $entry = $zip->statIndex($index);
+            $entryName = is_array($entry) ? (string)($entry['name'] ?? '') : '';
+            $size = is_array($entry) ? (int)($entry['size'] ?? -1) : -1;
+            if ($entryName === '' || str_contains($entryName, "\0") || str_contains($entryName, '\\') || str_starts_with($entryName, '/') || preg_match('~(?:^|/)\.\.(?:/|$)~', $entryName) || isset($names[$entryName]) || $size < 0 || $size > 20971520) fail(400, 'ZIP 包含不安全或过大的文件');
+            $names[$entryName] = true;
+            $total += $size;
+            if ($total > 52428800 || ($compressedBytes > 0 && $total > $compressedBytes * 50)) fail(400, 'ZIP 解压后体积超出限制');
+            $operatingSystem = 0;
+            $attributes = 0;
+            if (method_exists($zip, 'getExternalAttributesIndex') && $zip->getExternalAttributesIndex($index, $operatingSystem, $attributes)) {
+                if ((($attributes >> 16) & 0xF000) === 0xA000) fail(400, 'ZIP 不允许符号链接');
+            }
+        }
+    } finally {
+        $zip->close();
+    }
+}
+
+function zip_attachment_remote_url_valid(string $url): bool
+{
+    if (preg_match('/[\x00-\x20\\\\]/', $url)) return false;
+    $parts = parse_url($url);
+    if (!is_array($parts) || strtolower((string)($parts['scheme'] ?? '')) !== 'https' || empty($parts['host']) || isset($parts['user']) || isset($parts['pass']) || !preg_match('/\.zip$/i', (string)($parts['path'] ?? ''))) return false;
+    $host = strtolower(rtrim((string)$parts['host'], '.'));
+    if ($host === '' || $host === 'localhost' || str_ends_with($host, '.localhost') || str_ends_with($host, '.local') || str_ends_with($host, '.internal')) return false;
+    if (filter_var($host, FILTER_VALIDATE_IP)) return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    return (bool)preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i', $host);
 }
 
 function zip_attachment_available_to(int $id, array $viewer): array

@@ -11,7 +11,7 @@
     if (!checkButton || !status || !progress || !filePanel) return;
 
     function csrfToken() {
-        var input = document.querySelector('#program-update input[name="csrf"], input[name="csrf"]');
+        var input = document.querySelector('#program-update input[name="csrf"], #program-update-csrf');
         return input ? input.value : '';
     }
 
@@ -48,7 +48,7 @@
         var token = escapeHtml(csrfToken());
 
         filePanel.innerHTML =
-            '<details open>' +
+            '<details class="update-file-list" open>' +
                 '<summary>更新文件清单（' + names.length + ' 个）</summary>' +
                 '<pre>' + list + '</pre>' +
             '</details>' +

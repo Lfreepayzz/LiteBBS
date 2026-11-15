@@ -19,17 +19,18 @@ function handle_topic_reply(int $topicId, array $input, array $files): never {
     $pdo=db();
     $pdo->beginTransaction();
     try{
-        $topic=h('SELECT t.id FROM topics t JOIN categories c ON c.id=t.category_id WHERE t.id=? AND t.status="normal" AND t.is_locked=0 AND c.is_visible=1',[$topicId])->fetch();
+        $topic=h('SELECT t.id,t.category_id FROM topics t WHERE t.id=? AND t.status="normal" AND t.is_locked=0',[$topicId])->fetch();
         if(!$topic){ $pdo->rollBack();fail(404,'主题不存在、分区已隐藏或主题已锁定'); }
+        if(!h('SELECT id FROM categories WHERE id=? AND is_visible=1 LOCK IN SHARE MODE',[(int)$topic['category_id']])->fetch()) { $pdo->rollBack();fail(404,'主题不存在、分区已隐藏或主题已锁定'); }
         h('INSERT INTO posts(topic_id,user_id,body_markdown,body_html,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6))',[$topic['id'],$user['id'],$body,render_md($body)]);
         $postId=(int)$pdo->lastInsertId();
         h('INSERT INTO notification_outbox(topic_id,post_id,actor_id,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))',[$topicId,$postId,(int)$user['id']]);
         extension_event_sync('post.created', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id'], 'post'=>$input, 'files'=>$files, 'user'=>$user]);
+        enqueue_outbox_event('post.created.async', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id']]);
         $updated=h('UPDATE topics SET reply_count=reply_count+1,last_post_at=UTC_TIMESTAMP(6) WHERE id=? AND status="normal" AND is_locked=0',[$topicId]);
         if($updated->rowCount()!==1){ $pdo->rollBack();fail(409,'主题状态已变化，请刷新后重试'); }
-        enqueue_outbox_event('post.created.async', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id']]);
         $pdo->commit();
     }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
-    invalidate_topic_read_cache($topicId);
+    invalidate_topic_read_cache($topicId, (int)$topic['category_id']);
     redirect('/t/'.$topicId.'#p'.$postId);
 }

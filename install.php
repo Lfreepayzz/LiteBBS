@@ -45,7 +45,7 @@ if ($method === 'POST') {
     $admin = trim((string)($_POST['admin'] ?? ''));
     $email = trim((string)($_POST['email'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
-    if (!database_host_is_valid($host) || !preg_match('/^[a-zA-Z0-9_]{1,64}$/', $name) || !preg_match('/^[a-zA-Z0-9_]{1,64}$/', $dbuser) || $port < 1 || $port > 65535 || text_length($site) < 2 || text_length($site) > 100 || !preg_match('~^https://[a-z0-9.-]+(?::443)?$~i', $siteUrl) || text_length($admin) < 3 || text_length($admin) > 32 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 12 || (!defined('PASSWORD_ARGON2ID') && strlen($password) > 72)) $installError = '请检查站点、数据库和管理员信息。管理员密码至少 12 位。';
+    if (!database_host_is_valid($host) || !preg_match('/^[a-zA-Z0-9_]{1,64}$/', $name) || !preg_match('/^[a-zA-Z0-9_]{1,64}$/', $dbuser) || $port < 1 || $port > 65535 || text_length($site) < 2 || text_length($site) > 100 || !preg_match('~^https://[a-z0-9.-]+(?::443)?$~i', $siteUrl) || text_length($admin) < 3 || text_length($admin) > 32 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 6 || strlen($password) > 12) $installError = '请检查站点、数据库和管理员信息。管理员密码长度为 6-12 位。';
     else try {
         if (!extension_loaded('pdo_mysql')) throw new RuntimeException('服务器缺少 pdo_mysql PHP 扩展。');
         $requestHash = hash('sha256', json_encode([$host,$port,$name,$dbuser,$dbpass,$site,$siteUrl,$admin,$email]));
@@ -60,7 +60,7 @@ if ($method === 'POST') {
             if ($sameDatabase) { $recoveringConfiguredInstall = true; $resuming = true; }
         }
         $pdo = new PDO("mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4", $dbuser, $dbpass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false]);
-        $allowed = ['schema_migrations','users','sessions','categories','topics','posts','post_revisions','point_ledger','settings','plugins','themes','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'];
+        $allowed = ['schema_migrations','topic_view_flush_batches','users','sessions','categories','topics','posts','post_revisions','point_ledger','settings','plugins','themes','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'];
         $tables = $pdo->query('SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE()')->fetchAll(PDO::FETCH_COLUMN);
         if (array_diff($tables, $allowed) || (!$resuming && $tables)) throw new RuntimeException('数据库不是由本次安装创建的空数据库，拒绝继续');
         $state = ['request_hash'=>$requestHash];
@@ -107,7 +107,7 @@ if ($method === 'POST') {
 $error = isset($installError) ? '<p class="install-message install-error">'.e($installError).'</p>' : (isset($installRecoveryNotice) ? '<p class="install-message">'.e($installRecoveryNotice).'</p>' : '');
 $fields = '<section class="install-section"><div class="section-heading"><span>01</span><div><h2>站点信息</h2><p>论坛的名称与公开访问地址</p></div></div><div class="field-grid">'.input('site', '站点名称').input('site_url', '站点 HTTPS URL', 'url', 'placeholder="https://forum.example.com"').'</div></section>';
 $fields .= '<section class="install-section"><div class="section-heading"><span>02</span><div><h2>数据库连接</h2><p>填写论坛使用的数据库及账号</p></div></div><div class="field-grid">'.input('host', '数据库主机').input('port', '端口', 'number', 'value="3306"').input('dbname', '数据库名').input('dbuser', '数据库用户名').input('dbpass', '数据库密码', 'password').'</div></section>';
-$fields .= '<section class="install-section"><div class="section-heading"><span>03</span><div><h2>管理员账户</h2><p>用于首次登录论坛管理后台</p></div></div><div class="field-grid">'.input('admin', '管理员用户名').input('email', '管理员邮箱', 'email').input('password', '管理员密码（至少 12 位）', 'password', 'minlength="12"').'</div></section>';
+$fields .= '<section class="install-section"><div class="section-heading"><span>03</span><div><h2>管理员账户</h2><p>用于首次登录论坛管理后台</p></div></div><div class="field-grid">'.input('admin', '管理员用户名').input('email', '管理员邮箱', 'email').input('password', '管理员密码（6-12 位）', 'password', 'minlength="6" maxlength="12"').'</div></section>';
 $form = form('/install', '完成基础配置', $fields);
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');

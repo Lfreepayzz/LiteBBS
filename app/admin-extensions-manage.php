@@ -47,7 +47,6 @@ if ($method === 'POST') {
     try { extension_validate_directory($directory, 'plugin', $name); } catch (Throwable $error) { fail(400, '插件预检失败：'.$error->getMessage()); }
 
     if ($action === 'delete') {
-        if (empty($_POST['confirm_token']) && !hash_equals($name, trim((string)($_POST['confirm_name'] ?? '')))) fail(400, '请输入完整插件 ID 以确认删除');
         if (empty($_POST['confirm_token'])) confirmation_page('确认删除插件','将永久删除插件目录、登记信息，以及该插件专属前缀下的全部数据表和残留数据，此操作不可恢复。','plugin.delete',['name'=>$name,'action'=>'delete'],$name);
         require_confirmation('plugin.delete',$name,(string)$_POST['confirm_token']);
         $tables = $manifest['database_tables'] ?? [];
@@ -124,7 +123,7 @@ if ($section === 'themes') {
         $manifest = json_decode((string)@file_get_contents($manifestFile), true);
         try { extension_validate_directory($dir->getPathname(), 'plugin', $name); } catch (Throwable $error) { $invalidExtensions[$name] = $error->getMessage(); continue; }
         $enabled = (int)($installed[$name]['enabled'] ?? 0);
-        $body .= '<section class="extension-row"><div><h2>'.e($manifest['title'] ?? $name).'</h2><p>'.e($name).' · '.e($manifest['version'] ?? '未知版本').' · '.e($manifest['description'] ?? '暂无说明').' · '.($enabled ? '已启用' : '已停用').'</p></div><div class="extension-actions"><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="'.($enabled ? 'disable' : 'enable').'"><button class="primary">'.($enabled ? '停用' : '启用').'</button></form><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="delete"><label>输入 ID 确认<input name="confirm_name" required autocomplete="off"></label><button>删除插件</button></form></div></section>';
+         $body .= '<section class="extension-row"><div><h2>'.e($manifest['title'] ?? $name).'</h2><p>'.e($name).' · '.e($manifest['version'] ?? '未知版本').' · '.e($manifest['description'] ?? '暂无说明').' · '.($enabled ? '已启用' : '已停用').'</p></div><div class="extension-actions"><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="'.($enabled ? 'disable' : 'enable').'"><button class="primary">'.($enabled ? '停用' : '启用').'</button></form><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="delete"><button>删除插件</button></form></div></section>';
     }
     if ($invalidExtensions) { $body .= '<section class="extension-errors"><h2>未通过检查的插件</h2>'; foreach ($invalidExtensions as $name => $reason) $body .= '<article><strong>'.e($name).'</strong><p>'.e($reason).'</p></article>'; $body .= '</section>'; }
     if (!$installed && !isset($name)) $body .= '<p class="admin-intro">尚未安装插件。</p>';

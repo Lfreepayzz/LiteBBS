@@ -21,7 +21,7 @@
   </header>
   <main class="aurora-main">
     <div class="aurora-breadcrumb"><a href="/">社区</a><span>/</span><strong><?= e($title) ?></strong></div>
-    <div class="aurora-grid"><section class="aurora-content"><?= $body ?></section><aside class="aurora-aside"><div class="aurora-aside-orb"></div><span class="aurora-kicker">AURORA COMMUNITY</span><h2>让好观点<br>被看见。</h2><p>分享经验，认真讨论，和志同道合的人一起建立有价值的社区。</p><?php if ($user): ?><a class="aurora-action" href="/new">发起新讨论 <span>↗</span></a><?php else: ?><a class="aurora-action" href="/register">加入社区 <span>↗</span></a><?php endif; ?></aside></div>
+    <div class="aurora-grid"><section class="aurora-content"><?= $body ?></section><aside class="aurora-aside"><div class="aurora-aside-orb"></div><span class="aurora-kicker">AURORA COMMUNITY</span><h2>让好观点<br>被看见。</h2><p>分享经验，认真讨论，和志同道合的人一起建立有价值的社区。</p><?php if ($user): ?><a class="aurora-action" href="/new">发起新讨论 <span>↗</span></a><?php else: ?><a class="aurora-action" href="/register">加入社区 <span>↗</span></a><?php endif; ?><?= extension_slot('sidebar.sections', ['path'=>$requestPath, 'user'=>$user]) ?></aside></div>
   </main>
   <footer class="aurora-footer"><span><?= e($c['site'] ?? 'LiteBBS') ?></span><span>保持好奇，认真交流。</span></footer>
 </body>

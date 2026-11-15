@@ -22,7 +22,9 @@ if ($method === 'POST') {
     redirect('/admin');
 }
 
-$stats = h('SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM topics WHERE status="normal") topics,(SELECT COALESCE(SUM(reply_count),0) FROM topics WHERE status="normal") replies,(SELECT COUNT(*) FROM market_submissions WHERE status="pending") pending_extensions')->fetch();
+$stats = cached('admin:dashboard:stats:v1', 30, static function (): array {
+    return h('SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM topics WHERE status="normal") topics,(SELECT COALESCE(SUM(reply_count),0) FROM topics WHERE status="normal") replies,(SELECT COUNT(*) FROM market_submissions WHERE status="pending") pending_extensions')->fetch() ?: [];
+});
 $recent = h('SELECT t.id,t.title,t.status,t.is_pinned,t.is_locked,t.last_post_at,u.username FROM topics t JOIN users u ON u.id=t.user_id WHERE t.status="normal" ORDER BY t.id DESC LIMIT 8')->fetchAll();
 $cards = [
     '注册用户' => (int)$stats['users'],

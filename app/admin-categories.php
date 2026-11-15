@@ -8,20 +8,20 @@ if ($method==='POST') {
  if ($action==='delete'||$action==='restore') {
   if (!$id||!h('SELECT id FROM categories WHERE id=?',[$id])->fetchColumn()) fail(404,'分区不存在');
   h('UPDATE categories SET is_visible=? WHERE id=?',[$action==='restore'?1:0,$id]);
-  audit('category.'.$action,'category',$id); invalidate('categories'); invalidate('topics'); redirect('/admin/categories');
+  audit('category.'.$action,'category',$id); invalidate('categories'); invalidate_topic_listing_cache($id, true); redirect('/admin/categories');
  }
  if ($action!=='save') fail(400,'操作无效');
- $title=trim((string)($_POST['title']??'')); $desc=trim((string)($_POST['description']??''));
- $position=(int)($_POST['position']??0); $visible=isset($_POST['is_visible'])?1:0;
+  $title=trim((string)($_POST['title']??'')); $desc=trim((string)($_POST['description']??''));
+  $position=(int)($_POST['position']??0); $visible=isset($_POST['is_visible'])?1:0; $countChanged=false; $isNew=$id===0;
  if (text_length($title)<1||text_length($title)>100||text_length($desc)>500) fail(400,'分区名称或说明长度无效');
   try { if ($id) {
-  if (!h('SELECT id FROM categories WHERE id=?',[$id])->fetchColumn()) fail(404,'分区不存在');
+  $existing=h('SELECT is_visible FROM categories WHERE id=?',[$id])->fetch(); if (!$existing) fail(404,'分区不存在'); $countChanged=(int)$existing['is_visible']!==$visible;
   h('UPDATE categories SET slug=?,title=?,description=?,position=?,is_visible=? WHERE id=?',[slug($title),$title,$desc,$position,$visible,$id]);
  } else {
   h('INSERT INTO categories(slug,title,description,position,is_visible) VALUES(?,?,?,?,?)',[slug($title),$title,$desc,$position,$visible]);
   $id=(int)db()->lastInsertId();
   }} catch (PDOException $error) { if ($error->getCode()==='23000') fail(409,'分区名称生成的 slug 已存在，请使用不同名称'); throw $error; }
- audit('category.saved','category',$id); invalidate('categories'); invalidate('topics'); redirect('/admin/categories');
+ audit('category.saved','category',$id); invalidate('categories'); invalidate_topic_listing_cache($id, $countChanged || $isNew); redirect('/admin/categories');
 }
 $rows=h('SELECT id,title,description,position,is_visible FROM categories ORDER BY position,id')->fetchAll();
 $body='<p class="admin-intro">创建分区、修改名称与说明、调整顺序，或隐藏不再使用的分区。隐藏不会删除已有主题。</p>';

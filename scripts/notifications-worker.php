@@ -10,4 +10,4 @@ if (!is_file(config_file())) exit("Private configuration is missing.\n");
 
 $limit=max(1,min(500,(int)($argv[1]??100)));
 $processed=process_notification_outbox($limit);
-fwrite(STDOUT,"Processed {$processed} notification events.\n");
+fwrite(STDOUT,"Processed {$processed} notification batches.\n");

@@ -10,10 +10,9 @@ function dispatch_application_route(\LiteBBS\Framework\Request $request, \LiteBB
 {
     $path = $request->path;
     $method = $request->method;
-    $pdo = db();
     ob_start();
     try {
-        if (plugin_route_dispatch($request->context(current_user(), $pdo))) {
+        if (plugin_route_dispatch(['method'=>$method, 'path'=>$path])) {
             return new \LiteBBS\Framework\Response((string)ob_get_clean(), http_response_code() ?: 200);
         }
         $legacyResponse = require __DIR__.'/legacy-dispatch.php';

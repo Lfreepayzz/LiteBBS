@@ -64,7 +64,7 @@ if ($method === 'POST') {
         }
         h('UPDATE users SET role=?,status=?,is_developer=? WHERE id=?', [$role, $status, $developer, $id]);
         h('DELETE FROM sessions WHERE user_id=?', [$id]);
-        if ($id === (int)($_SESSION['uid'] ?? 0)) { $_SESSION = []; session_destroy(); }
+        if ($id === (int)($_SESSION['uid'] ?? 0)) { start_session(); $_SESSION = []; session_destroy(); }
         audit('user.updated', 'user', $id, ['role' => $role, 'status' => $status, 'is_developer' => $developer]);
         $db->commit();
         redirect('/admin/users');

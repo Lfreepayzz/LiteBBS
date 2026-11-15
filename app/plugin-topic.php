@@ -14,11 +14,12 @@ if ($method === 'POST') {
     $category = (int)($_POST['category'] ?? 0);
     $categoryIds = array_map('intval', array_column($categories, 'id'));
     if (text_length($title) < 4 || text_length($title) > 120 || text_length($body) < 5 || text_length($body) > 12000 || !in_array($category, $categoryIds, true)) fail(400, '标题、正文或分区无效');
+    $pdo = db();
     $pdo->beginTransaction();
     try {
-        // Recheck under the write transaction so a category hidden concurrently
-        // with the form submission cannot receive new content.
-        $categoryRow = h('SELECT id FROM categories WHERE id=? AND is_visible=1 FOR UPDATE', [$category])->fetch();
+        // A shared lock prevents a concurrent hide without serializing topic
+        // creators in the same visible category.
+        $categoryRow = h('SELECT id FROM categories WHERE id=? AND is_visible=1 LOCK IN SHARE MODE', [$category])->fetch();
         if (!$categoryRow) {
             $pdo->rollBack();
             fail(400, '分区已隐藏或无效');
@@ -35,7 +36,8 @@ if ($method === 'POST') {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $error;
     }
-    invalidate_topic_read_cache($topicId, $category);
+    invalidate('topic:'.$topicId);
+    invalidate_topic_listing_cache($category, true);
     redirect('/t/'.$topicId);
 }
 $options = '';
