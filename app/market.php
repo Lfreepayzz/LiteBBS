@@ -70,13 +70,16 @@ if ($path==='/admin/extensions'&&in_array($method,['GET','POST'],true)) {
         if($action==='download') {
             $lock=program_update_lock();
             try { $remote=program_update_remote(); $target=program_update_package(); $tmp=$target.'.tmp'; program_update_download($remote['archive'],$tmp); if(!@rename($tmp,$target)){@unlink($tmp);throw new RuntimeException('更新包保存失败');} program_update_state(['status'=>'downloaded','version'=>$remote['version'],'files'=>count($remote['files']),'sha256'=>hash_file('sha256',$target)]); redirect('/admin/extensions'); }
-            catch(Throwable $error){@unlink(program_update_package().'.tmp');fclose($lock);fail(502,'更新包下载失败：'.$error->getMessage());}
-            fclose($lock);
+            catch (\LiteBBS\Framework\ResponseHalt $halt) { throw $halt; }
+            catch(Throwable $error){@unlink(program_update_package().'.tmp');fail(502,'更新包下载失败：'.$error->getMessage());}
+            finally { fclose($lock); }
         }
         if($action==='apply') {
             $lock=program_update_lock();
-            try { $remote=program_update_remote(); $state=program_update_state(); if(!is_file(program_update_package())||!is_array($state)||($state['status']??'')!=='downloaded'||($state['version']??'')!==$remote['version']||($state['sha256']??'')!==hash_file('sha256',program_update_package())) throw new RuntimeException('更新包已过期，请重新检查并下载'); program_update_apply(program_update_package(),$remote); fclose($lock); redirect('/admin/extensions'); }
-            catch(Throwable $error){fclose($lock);fail(500,'程序更新失败：'.$error->getMessage());}
+            try { $remote=program_update_remote(); $state=program_update_state(); if(!is_file(program_update_package())||!is_array($state)||($state['status']??'')!=='downloaded'||($state['version']??'')!==$remote['version']||($state['sha256']??'')!==hash_file('sha256',program_update_package())) throw new RuntimeException('更新包已过期，请重新检查并下载'); program_update_apply(program_update_package(),$remote); redirect('/admin/extensions'); }
+            catch (\LiteBBS\Framework\ResponseHalt $halt) { throw $halt; }
+            catch(Throwable $error){fail(500,'程序更新失败：'.$error->getMessage());}
+            finally { fclose($lock); }
         }
         fail(400,'扩展操作无效');
     }
