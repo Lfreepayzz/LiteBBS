@@ -22,7 +22,7 @@ if ($path === '/avatar/upload' && $method === 'POST') {
     if (!$saved) fail(500, '头像保存失败');
     try { $old = (string)h('SELECT avatar_path FROM users WHERE id=?', [$user['id']])->fetchColumn(); h('UPDATE users SET avatar_path=? WHERE id=?', [$name.'.png', $user['id']]); }
     catch (Throwable $error) { @unlink($target); throw $error; }
-    if ($old !== '') @unlink($dir.'/'.basename($old)); redirect('/me?tab=profile');
+    if ($old !== '') @unlink($dir.'/'.basename($old)); extension_event_async('user.avatar.updated',['user_id'=>(int)$user['id']]); redirect('/me?tab=profile');
 }
 if (preg_match('~^/avatar/(\d+)$~', $path, $match) && $method === 'GET') {
     $avatar = h('SELECT avatar_path FROM users WHERE id=? AND status="active"', [(int)$match[1]])->fetchColumn(); $file = $avatar ? dirname(__DIR__).'/uploads/avatars/'.basename((string)$avatar) : ''; if (!$file || !is_file($file)) fail(404, '头像不存在');
@@ -33,6 +33,7 @@ if (preg_match('~^/topic/(\d+)/(bookmark|subscribe)$~', $path, $match) && $metho
     if (!h('SELECT id FROM topics WHERE id=? AND status="normal"', [$topicId])->fetch()) fail(404, '主题不存在');
     $table = $match[2] === 'bookmark' ? 'bookmarks' : 'topic_subscriptions'; $db=db(); $db->beginTransaction();
     try { h('SELECT id FROM users WHERE id=? FOR UPDATE', [(int)$user['id']])->fetchColumn(); $exists = (bool)h('SELECT 1 FROM '.$table.' WHERE user_id=? AND topic_id=?', [$user['id'], $topicId])->fetchColumn(); if ($exists) h('DELETE FROM '.$table.' WHERE user_id=? AND topic_id=?', [$user['id'], $topicId]); else h('INSERT INTO '.$table.'(user_id,topic_id,created_at) VALUES(?,?,UTC_TIMESTAMP(6))', [$user['id'], $topicId]); $db->commit(); } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+    extension_event_async($match[2] === 'bookmark' ? ($exists ? 'bookmark.deleted' : 'bookmark.created') : ($exists ? 'subscription.deleted' : 'subscription.created'), ['topic_id'=>$topicId,'actor_id'=>(int)$user['id']]);
     redirect('/t/'.$topicId);
 }
 if (preg_match('~^/post/(\d+)/like$~', $path, $match) && $method === 'POST') {
@@ -41,14 +42,15 @@ if (preg_match('~^/post/(\d+)/like$~', $path, $match) && $method === 'POST') {
     if (!$post) fail(404, '回复不存在');
     $db=db(); $db->beginTransaction();
     try { h('SELECT id FROM users WHERE id=? FOR UPDATE', [(int)$user['id']])->fetchColumn(); $exists = (bool)h('SELECT 1 FROM reactions WHERE user_id=? AND post_id=? AND reaction="like"', [$user['id'], $postId])->fetchColumn(); if ($exists) h('DELETE FROM reactions WHERE user_id=? AND post_id=? AND reaction="like"', [$user['id'], $postId]); else h('INSERT INTO reactions(user_id,post_id,reaction,created_at) VALUES(?, ?, "like", UTC_TIMESTAMP(6))', [$user['id'], $postId]); $db->commit(); } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+    extension_event_async($exists ? 'reaction.deleted' : 'reaction.created', ['post_id'=>$postId,'topic_id'=>(int)$post['topic_id'],'actor_id'=>(int)$user['id'],'reaction'=>'like']);
     redirect('/t/'.(int)$post['topic_id'].'#p'.$postId);
 }
 if ($path === '/report' && $method === 'POST') {
     require_post(); $user = current_user(); if (!$user) redirect('/login'); limit_action('report', 10, 300, 'user:'.$user['id']); limit_action('report-ip', 30, 3600, hash('sha256',(string)($_SERVER['REMOTE_ADDR']??''))); $type = (string)($_POST['target_type'] ?? ''); $target = (int)($_POST['target_id'] ?? 0); $reason = trim((string)($_POST['reason'] ?? ''));
     if (!in_array($type, ['topic','post','user'], true) || $target < 1 || text_length($reason) < 5 || text_length($reason) > 1000) fail(400, '举报信息无效'); $table = ['topic'=>'topics','post'=>'posts','user'=>'users'][$type]; if (!h('SELECT id FROM '.$table.' WHERE id=?', [$target])->fetch()) fail(404, '举报目标不存在');
-    h('INSERT INTO reports(reporter_id,target_type,target_id,reason,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6))', [$user['id'],$type,$target,$reason]); $reportId = (int)db()->lastInsertId(); audit('report.created', 'report', $reportId, ['target_type'=>$type,'target_id'=>$target]); page('举报已提交', '<section class="community-message"><h1>举报已提交</h1><p>举报编号 #'. $reportId .'，管理员会审核这条举报。</p><a href="/">返回首页</a></section>'); return;
+    h('INSERT INTO reports(reporter_id,target_type,target_id,reason,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6))', [$user['id'],$type,$target,$reason]); $reportId = (int)db()->lastInsertId(); audit('report.created', 'report', $reportId, ['target_type'=>$type,'target_id'=>$target]); extension_event_async('report.created',['report_id'=>$reportId,'target_type'=>$type,'target_id'=>$target,'actor_id'=>(int)$user['id']]); page('举报已提交', '<section class="community-message"><h1>举报已提交</h1><p>举报编号 #'. $reportId .'，管理员会审核这条举报。</p><a href="/">返回首页</a></section>'); return;
 }
 if (preg_match('~^/user/(\d+)/(block|unblock)$~', $path, $match) && $method === 'POST') {
     require_post(); $user = current_user(); if (!$user) redirect('/login'); $blocked = (int)$match[1];
-    if ($match[2] === 'block') { if ($blocked === (int)$user['id']) fail(400, '不能屏蔽自己'); if (!h('SELECT id FROM users WHERE id=? AND status="active"', [$blocked])->fetch()) fail(404, '用户不存在'); h('INSERT IGNORE INTO user_blocks(user_id,blocked_user_id,created_at) VALUES(?,?,UTC_TIMESTAMP(6))', [$user['id'],$blocked]); } else h('DELETE FROM user_blocks WHERE user_id=? AND blocked_user_id=?', [$user['id'],$blocked]); redirect('/me?tab=blocks');
+    if ($match[2] === 'block') { if ($blocked === (int)$user['id']) fail(400, '不能屏蔽自己'); if (!h('SELECT id FROM users WHERE id=? AND status="active"', [$blocked])->fetch()) fail(404,'用户不存在'); $changed=h('INSERT IGNORE INTO user_blocks(user_id,blocked_user_id,created_at) VALUES(?,?,UTC_TIMESTAMP(6))',[$user['id'],$blocked])->rowCount()===1; if($changed)extension_event_async('user.blocked',['actor_id'=>(int)$user['id'],'user_id'=>$blocked]); } else { $changed=h('DELETE FROM user_blocks WHERE user_id=? AND blocked_user_id=?',[$user['id'],$blocked])->rowCount()===1; if($changed)extension_event_async('user.unblocked',['actor_id'=>(int)$user['id'],'user_id'=>$blocked]); } redirect('/me?tab=blocks');
 }

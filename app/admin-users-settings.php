@@ -66,6 +66,7 @@ if ($method === 'POST') {
         h('DELETE FROM sessions WHERE user_id=?', [$id]);
         if ($id === (int)($_SESSION['uid'] ?? 0)) { start_session(); $_SESSION = []; session_destroy(); }
         audit('user.updated', 'user', $id, ['role' => $role, 'status' => $status, 'is_developer' => $developer]);
+        extension_event_async('user.updated', ['user_id'=>$id,'actor_id'=>(int)$actor['id'],'role'=>$role,'status'=>$status,'is_developer'=>$developer]);
         $db->commit();
         redirect('/admin/users');
     }
@@ -73,19 +74,23 @@ if ($method === 'POST') {
     $site = trim((string)($_POST['site'] ?? ''));
     $registration = (string)($_POST['registration'] ?? '1');
     $interval = (int)($_POST['post_interval'] ?? 0);
+    $topicRateMax = (int)($_POST['topic_rate_max'] ?? 0);
+    $topicRateWindow = (int)($_POST['topic_rate_window'] ?? 300);
+    $replyRateMax = (int)($_POST['reply_rate_max'] ?? 0);
+    $replyRateWindow = (int)($_POST['reply_rate_window'] ?? 300);
     $locale = (string)($_POST['locale'] ?? 'zh-CN');
     $seoHomeDescription = trim((string)($_POST['seo_home_description'] ?? ''));
     $seoIndexing = (string)($_POST['seo_indexing'] ?? '1');
     $seoVerification = [];
     foreach (['google','bing','baidu','yandex','naver'] as $engine) $seoVerification[$engine] = trim((string)($_POST['seo_'.$engine.'_verification'] ?? ''));
-    if (text_length($site) < 2 || text_length($site) > 100 || !in_array($registration, ['0', '1'], true) || $interval < 0 || $interval > 3600 || !in_array($locale, ['zh-CN', 'en-US'], true) || text_length($seoHomeDescription) > 220 || !in_array($seoIndexing, ['0', '1'], true)) fail(400, '设置值无效');
+    if (text_length($site) < 2 || text_length($site) > 100 || !in_array($registration, ['0', '1'], true) || $interval < 0 || $interval > 3600 || $topicRateMax < 0 || $topicRateMax > 1000 || $replyRateMax < 0 || $replyRateMax > 1000 || $topicRateWindow < 1 || $topicRateWindow > 86400 || $replyRateWindow < 1 || $replyRateWindow > 86400 || !in_array($locale, ['zh-CN', 'en-US'], true) || text_length($seoHomeDescription) > 220 || !in_array($seoIndexing, ['0', '1'], true)) fail(400, '设置值无效');
     foreach ($seoVerification as $value) if ($value !== '' && (!preg_match('/^[\x21-\x7E]{1,512}$/', $value) || strlen($value) > 512)) fail(400, '站长平台验证码格式无效');
     $config['site'] = $site;
     $config['locale'] = $locale;
     $config['seo'] = ['home_description'=>$seoHomeDescription, 'indexing'=>(int)$seoIndexing];
     foreach ($seoVerification as $engine=>$value) $config['seo'][$engine.'_verification'] = $value;
     try { write_config($config); } catch (Throwable $error) { fail(500, '配置写入失败'); }
-    foreach (['registration' => $registration, 'post_interval' => (string)$interval] as $key => $value) {
+    foreach (['registration'=>$registration,'post_interval'=>(string)$interval,'topic_rate_max'=>(string)$topicRateMax,'topic_rate_window'=>(string)$topicRateWindow,'reply_rate_max'=>(string)$replyRateMax,'reply_rate_window'=>(string)$replyRateWindow] as $key => $value) {
         h('INSERT INTO settings(setting_key,setting_value,updated_at) VALUES(?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_at=VALUES(updated_at)', [$key, $value]);
     }
     invalidate('settings');
@@ -105,7 +110,7 @@ if ($path === '/admin/users') {
 }
 
 $settings = [];
-foreach (h('SELECT setting_key,setting_value FROM settings WHERE setting_key IN ("registration","post_interval")')->fetchAll() as $row) $settings[$row['setting_key']] = $row['setting_value'];
+foreach (h('SELECT setting_key,setting_value FROM settings WHERE setting_key IN ("registration","post_interval","topic_rate_max","topic_rate_window","reply_rate_max","reply_rate_window")')->fetchAll() as $row) $settings[$row['setting_key']] = $row['setting_value'];
 $seo = is_array($config['seo'] ?? null) ? $config['seo'] : [];
 $body = '<form class="admin-settings-form" method="post" action="/admin/settings"><input type="hidden" name="csrf" value="'.e(csrf()).'">'.
     '<section class="settings-section"><div class="settings-section-heading"><span>01</span><div><h3>社区信息</h3><p>用于浏览器标题、站点标识和默认界面语言。</p></div></div><div class="settings-grid settings-grid-compact">'.
@@ -115,6 +120,10 @@ $body = '<form class="admin-settings-form" method="post" action="/admin/settings
     '<section class="settings-section"><div class="settings-section-heading"><span>02</span><div><h3>社区行为</h3><p>控制新成员进入与公开内容发布的节奏。</p></div></div><div class="settings-grid settings-grid-compact">'.
     '<label>注册开关<select name="registration"><option value="1"'.(($settings['registration'] ?? '1') === '1' ? ' selected' : '').'>开放注册</option><option value="0"'.(($settings['registration'] ?? '1') === '0' ? ' selected' : '').'>暂停注册</option></select><small>关闭后，现有会员仍可正常登录和使用。</small></label>'.
     '<label>发帖间隔（秒）<input name="post_interval" type="number" min="0" max="3600" value="'.(int)($settings['post_interval'] ?? 0).'" inputmode="numeric"><small>设为 0 表示不额外限制；最大 3600 秒。</small></label>'.
+    '<label>主题发布次数<input name="topic_rate_max" type="number" min="0" max="1000" value="'.(int)($settings['topic_rate_max'] ?? 0).'" inputmode="numeric"><small>设为 0 表示关闭主题次数限制。</small></label>'.
+    '<label>主题统计周期（秒）<input name="topic_rate_window" type="number" min="1" max="86400" value="'.(int)($settings['topic_rate_window'] ?? 300).'" inputmode="numeric"><small>仅在主题发布次数大于 0 时生效。</small></label>'.
+    '<label>回复发布次数<input name="reply_rate_max" type="number" min="0" max="1000" value="'.(int)($settings['reply_rate_max'] ?? 0).'" inputmode="numeric"><small>设为 0 表示关闭回复次数限制。</small></label>'.
+    '<label>回复统计周期（秒）<input name="reply_rate_window" type="number" min="1" max="86400" value="'.(int)($settings['reply_rate_window'] ?? 300).'" inputmode="numeric"><small>仅在回复发布次数大于 0 时生效。</small></label>'.
     '</div></section>'.
     '<section class="settings-section"><div class="settings-section-heading"><span>03</span><div><h3>搜索展示</h3><p>设置首页摘要和搜索引擎公开收录策略。</p></div></div><div class="settings-grid">'.
     '<label class="settings-wide">首页 SEO 描述<textarea name="seo_home_description" maxlength="220" rows="4" placeholder="用于首页搜索结果摘要与社交分享">'.e($seo['home_description'] ?? '').'</textarea><small>建议 50-160 个字符；主题和分区页仍使用各自内容摘要。</small></label>'.

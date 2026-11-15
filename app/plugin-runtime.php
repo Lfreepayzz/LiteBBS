@@ -53,9 +53,9 @@ function plugin_stylesheets(): string {
 function plugin_asset_dispatch(array $context): bool {
     if (($context['method'] ?? '') !== 'GET' || !preg_match('~^/plugin-assets/([a-z][a-z0-9_-]{1,31})/(.+)$~', (string)($context['path'] ?? ''), $match)) return false;
     $name = $match[1];
-    $style = rawurldecode($match[2]);
+    $asset = rawurldecode($match[2]);
     $plugin = plugin_runtime_load()[$name] ?? null;
-    $allowed = is_array($plugin) && in_array($style, $plugin['_styles'] ?? [], true);
+    $allowed = is_array($plugin) && in_array($asset, $plugin['_styles'] ?? [], true);
     // Assets are the only legacy-plugin path that needs the extension registry.
     // Avoid booting plugins for every ordinary application request.
     if (!$allowed && function_exists('extension_runtime_load')) {
@@ -65,16 +65,16 @@ function plugin_asset_dispatch(array $context): bool {
             $manifest = extension_plugin_manifest($name);
             if (is_array($manifest) && ($manifest['schema'] ?? null) === 1 && ($manifest['id'] ?? '') === $name) {
                 $assets = extension_manifest_assets($manifest);
-                $allowed = is_array($assets) && in_array($style, $assets, true);
+                $allowed = is_array($assets) && in_array($asset, array_column($assets, 'path'), true);
             } else {
                 extension_runtime_load($name);
-                foreach (extension_registry()['assets'] as $asset) if ($asset['plugin'] === $name && $asset['path'] === $style && $asset['type'] === 'css') { $allowed = true; break; }
+                foreach (extension_registry()['assets'] as $registered) if ($registered['plugin'] === $name && $registered['path'] === $asset && in_array($registered['type'], ['css','js'], true)) { $allowed = true; break; }
             }
             break;
         }
     }
     if (!$allowed) return false;
-    $file = extension_secure_runtime_file(dirname(__DIR__).'/plugins/'.$name, $style);
+    $file = extension_secure_runtime_file(dirname(__DIR__).'/plugins/'.$name, $asset);
     if ($file === null) return false;
     if (headers_sent()) return false;
     $etag = '"'.asset_version($file).'"';
@@ -84,7 +84,7 @@ function plugin_asset_dispatch(array $context): bool {
         http_response_code(304);
         return true;
     }
-    header('Content-Type: text/css; charset=utf-8');
+    header('Content-Type: '.(str_ends_with($asset, '.js') ? 'application/javascript' : 'text/css').'; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
     readfile($file);
     return true;

@@ -8,7 +8,7 @@ if ($method==='POST') {
  if ($action==='delete'||$action==='restore') {
   if (!$id||!h('SELECT id FROM categories WHERE id=?',[$id])->fetchColumn()) fail(404,'分区不存在');
   h('UPDATE categories SET is_visible=? WHERE id=?',[$action==='restore'?1:0,$id]);
-  audit('category.'.$action,'category',$id); invalidate('categories'); invalidate_topic_listing_cache($id, true); redirect('/admin/categories');
+  audit('category.'.$action,'category',$id); extension_event_async('category.visibility.updated',['category_id'=>$id,'visible'=>$action==='restore','actor_id'=>(int)$actor['id']]); invalidate('categories'); invalidate_topic_listing_cache($id, true); redirect('/admin/categories');
  }
  if ($action!=='save') fail(400,'操作无效');
   $title=trim((string)($_POST['title']??'')); $desc=trim((string)($_POST['description']??''));
@@ -21,7 +21,7 @@ if ($method==='POST') {
   h('INSERT INTO categories(slug,title,description,position,is_visible) VALUES(?,?,?,?,?)',[slug($title),$title,$desc,$position,$visible]);
   $id=(int)db()->lastInsertId();
   }} catch (PDOException $error) { if ($error->getCode()==='23000') fail(409,'分区名称生成的 slug 已存在，请使用不同名称'); throw $error; }
- audit('category.saved','category',$id); invalidate('categories'); invalidate_topic_listing_cache($id, $countChanged || $isNew); redirect('/admin/categories');
+  audit('category.saved','category',$id); extension_event_async($isNew ? 'category.created' : 'category.updated',['category_id'=>$id,'actor_id'=>(int)$actor['id']]); invalidate('categories'); invalidate_topic_listing_cache($id, $countChanged || $isNew); redirect('/admin/categories');
 }
 $rows=h('SELECT id,title,description,position,is_visible FROM categories ORDER BY position,id')->fetchAll();
 $body='<p class="admin-intro">创建分区、修改名称与说明、调整顺序，或隐藏不再使用的分区。隐藏不会删除已有主题。</p>';

@@ -8,6 +8,8 @@ require dirname(__DIR__).'/app/framework.php';
 require dirname(__DIR__).'/app/core.php';
 require dirname(__DIR__).'/app/extensions-security.php';
 require dirname(__DIR__).'/app/extension-framework.php';
+require dirname(__DIR__).'/app/plugin-migrations.php';
+require dirname(__DIR__).'/app/extension-platform.php';
 require dirname(__DIR__).'/app/outbox.php';
 if (!is_file(config_file())) exit("Private configuration is missing.\n");
 $limit = max(1, min(500, (int)($argv[1] ?? 100)));

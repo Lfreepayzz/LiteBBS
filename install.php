@@ -8,8 +8,7 @@ require __DIR__.'/app/extensions-security.php';
 if (!extension_loaded('mbstring')) { http_response_code(500); exit('LiteBBS requires the mbstring extension.'); }
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
-session_name(request_is_https() ? '__Host-lbbs' : 'lbbs');
-session_set_cookie_params(['secure' => request_is_https(), 'httponly' => true, 'samesite' => 'Lax', 'path' => '/']);
+configure_session();
 foreach (["Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'self'; script-src 'self'", 'X-Frame-Options: DENY', 'X-Content-Type-Options: nosniff', 'Referrer-Policy: strict-origin-when-cross-origin', 'Permissions-Policy: camera=(), microphone=(), geolocation=()', 'Cross-Origin-Opener-Policy: same-origin'] as $header) header($header);
 if (request_is_https()) header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 
@@ -60,7 +59,7 @@ if ($method === 'POST') {
             if ($sameDatabase) { $recoveringConfiguredInstall = true; $resuming = true; }
         }
         $pdo = new PDO("mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4", $dbuser, $dbpass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false]);
-        $allowed = ['schema_migrations','topic_view_flush_batches','users','sessions','categories','topics','posts','post_revisions','point_ledger','settings','plugins','themes','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'];
+        $allowed = ['schema_migrations','topic_view_flush_batches','users','sessions','categories','topics','posts','post_revisions','point_ledger','settings','plugins','themes','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','extension_jobs','extension_job_failures','plugin_user_field_values','plugin_search_documents','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'];
         $tables = $pdo->query('SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE()')->fetchAll(PDO::FETCH_COLUMN);
         if (array_diff($tables, $allowed) || (!$resuming && $tables)) throw new RuntimeException('数据库不是由本次安装创建的空数据库，拒绝继续');
         $state = ['request_hash'=>$requestHash];
@@ -74,6 +73,7 @@ if ($method === 'POST') {
             $sql = preg_replace('/^CREATE TABLE /i', 'CREATE TABLE IF NOT EXISTS ', $sql);
             $sql = preg_replace('/^INSERT INTO schema_migrations/i', 'INSERT IGNORE INTO schema_migrations', $sql);
             $sql = preg_replace('/^INSERT INTO themes/i', 'INSERT IGNORE INTO themes', $sql);
+            $sql = preg_replace('/^INSERT INTO plugins/i', 'INSERT IGNORE INTO plugins', $sql);
             $pdo->exec($sql);
         }
         $users = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
@@ -83,7 +83,7 @@ if ($method === 'POST') {
         $existingHash = $existingAdmin->fetchColumn();
         if ($users > 1 || $categories > 1 || ($users === 1 && (!$existingHash || !password_verify($password, (string)$existingHash)))) throw new RuntimeException('数据库不符合本次安装的可恢复状态');
         $nonEmptyTables = [];
-        foreach (['sessions','topics','posts','post_revisions','point_ledger','settings','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'] as $table) {
+            foreach (['sessions','topics','posts','post_revisions','point_ledger','settings','audit_logs','rate_limits','market_submissions','notifications','notification_outbox','outbox_events','failed_outbox_events','extension_jobs','extension_job_failures','plugin_user_field_values','plugin_search_documents','plugin_migrations','bookmarks','reactions','reports','topic_subscriptions','user_blocks','private_messages'] as $table) {
             if ((int)$pdo->query('SELECT COUNT(*) FROM `'.$table.'`')->fetchColumn() !== 0) $nonEmptyTables[] = $table;
         }
         if ($nonEmptyTables) throw new RuntimeException('数据库已包含论坛运行数据（'.implode(', ', $nonEmptyTables).'），拒绝将其作为未完成安装继续；没有数据被删除。已有站点请保留 private 配置和安装锁后直接访问论坛；升级现有站点请使用 CLI 迁移脚本。');
@@ -108,8 +108,8 @@ $error = isset($installError) ? '<p class="install-message install-error">'.e($i
 $fields = '<section class="install-section"><div class="section-heading"><span>01</span><div><h2>站点信息</h2><p>论坛的名称与公开访问地址</p></div></div><div class="field-grid">'.input('site', '站点名称').input('site_url', '站点 HTTPS URL', 'url', 'placeholder="https://forum.example.com"').'</div></section>';
 $fields .= '<section class="install-section"><div class="section-heading"><span>02</span><div><h2>数据库连接</h2><p>填写论坛使用的数据库及账号</p></div></div><div class="field-grid">'.input('host', '数据库主机').input('port', '端口', 'number', 'value="3306"').input('dbname', '数据库名').input('dbuser', '数据库用户名').input('dbpass', '数据库密码', 'password').'</div></section>';
 $fields .= '<section class="install-section"><div class="section-heading"><span>03</span><div><h2>管理员账户</h2><p>用于首次登录论坛管理后台</p></div></div><div class="field-grid">'.input('admin', '管理员用户名').input('email', '管理员邮箱', 'email').input('password', '管理员密码（6-12 位）', 'password', 'minlength="6" maxlength="12"').'</div></section>';
-$form = form('/install', '完成基础配置', $fields);
+$form = form('/install.php', '完成基础配置', $fields);
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');
-echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#edf2ed"><title>安装 LiteBBS</title><link rel="stylesheet" href="/assets/css/install.css"></head><body><main class="install-shell"><aside class="install-rail"><a class="brand" href="/install"><span class="brand-mark">L</span><span>LiteBBS</span></a><div class="rail-copy"><span class="rail-kicker">FIRST RUN</span><h1>搭建你的<br>讨论空间。</h1><p>只需完成三项基础配置，即可开始使用论坛。</p></div><div class="rail-steps"><span><b>01</b> 站点信息</span><span><b>02</b> 数据库连接</span><span><b>03</b> 管理员账户</span></div><small>SECURE SETUP · HTTPS</small></aside><section class="install-main"><header class="mobile-brand"><span class="brand-mark">L</span><span>LiteBBS</span><span class="setup-tag">INITIAL SETUP</span></header><div class="page-heading"><p class="eyebrow">INITIAL SETUP <span> / </span> CONFIGURATION</p><h2>欢迎，开始安装</h2><p>设置站点、数据库和首位管理员。安装不会删除数据库中的现有数据。</p></div>'.$error.$form.'<footer>数据库账号将用于论坛日常运行及受控数据库升级。</footer></section></main></body></html>';
+echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#edf2ed"><title>安装 LiteBBS</title><link rel="stylesheet" href="/assets/css/install.css"></head><body><main class="install-shell"><aside class="install-rail"><a class="brand" href="/install.php"><span class="brand-mark">L</span><span>LiteBBS</span></a><div class="rail-copy"><span class="rail-kicker">FIRST RUN</span><h1>搭建你的<br>讨论空间。</h1><p>只需完成三项基础配置，即可开始使用论坛。</p></div><div class="rail-steps"><span><b>01</b> 站点信息</span><span><b>02</b> 数据库连接</span><span><b>03</b> 管理员账户</span></div><small>SECURE SETUP · HTTPS</small></aside><section class="install-main"><header class="mobile-brand"><span class="brand-mark">L</span><span>LiteBBS</span><span class="setup-tag">INITIAL SETUP</span></header><div class="page-heading"><p class="eyebrow">INITIAL SETUP <span> / </span> CONFIGURATION</p><h2>欢迎，开始安装</h2><p>设置站点、数据库和首位管理员。安装不会删除数据库中的现有数据。</p></div>'.$error.$form.'<footer>数据库账号将用于论坛日常运行及受控数据库升级。</footer></section></main></body></html>';
 exit;

@@ -7,8 +7,6 @@ if (!$user) redirect('/login');
 $categories = h('SELECT id,title FROM categories WHERE is_visible=1 ORDER BY position,id')->fetchAll();
 if ($method === 'POST') {
     require_post();
-    limit_action('topic-create', 3, 300, 'user:'.$user['id']);
-    enforce_post_interval((int)$user['id']);
     $title = trim((string)($_POST['title'] ?? ''));
     $body = trim((string)($_POST['body'] ?? ''));
     $category = (int)($_POST['category'] ?? 0);
@@ -17,6 +15,9 @@ if ($method === 'POST') {
     // Upload inspection runs before the transaction so extension file work does
     // not extend category and quota locks during topic creation.
     extension_event_sync('topic.create.preflight', ['post'=>$_POST, 'files'=>$_FILES, 'user'=>$user]);
+    extension_event_sync('topic.create.preflight.v2', ['actor_id'=>(int)$user['id'],'title'=>$title,'body'=>$body,'category_id'=>$category,'uploads'=>extension_safe_uploads($_FILES)]);
+    enforce_post_interval((int)$user['id']);
+    enforce_content_rate_limit('topic', (int)$user['id']);
     $pdo = db();
     $pdo->beginTransaction();
     try {
@@ -29,11 +30,12 @@ if ($method === 'POST') {
         }
         h('INSERT INTO topics(category_id,user_id,slug,title,created_at,last_post_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))', [$category,$user['id'],slug($title),$title]);
         $topicId = (int)$pdo->lastInsertId();
-        h('INSERT INTO posts(topic_id,user_id,body_markdown,body_html,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6))', [$topicId,$user['id'],$body,render_md($body)]);
+        h('INSERT INTO posts(topic_id,user_id,body_markdown,body_html,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6))', [$topicId,$user['id'],$body,extension_render_post_body($body, ['topic_id'=>$topicId,'actor_id'=>(int)$user['id'],'kind'=>'topic'])]);
         $postId = (int)$pdo->lastInsertId();
-        h('INSERT INTO notification_outbox(topic_id,post_id,actor_id,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))', [$topicId,$postId,(int)$user['id']]);
+        h('INSERT INTO notification_outbox(topic_id,post_id,actor_id,pending_topic_id,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE created_at=IF(VALUES(post_id)>post_id,VALUES(created_at),created_at),post_id=GREATEST(post_id,VALUES(post_id))', [$topicId,$postId,(int)$user['id'],$topicId]);
         extension_event_sync('topic.created', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id'], 'post'=>$_POST, 'files'=>$_FILES, 'user'=>$user]);
-        enqueue_outbox_event('topic.created.async', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id']]);
+        extension_event_sync('topic.created.v2', ['topic_id'=>$topicId,'post_id'=>$postId,'actor_id'=>(int)$user['id'],'title'=>$title,'body'=>$body,'category_id'=>$category,'uploads'=>extension_safe_uploads($_FILES)]);
+        extension_event_async('topic.created.async', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id']]);
         $pdo->commit();
     } catch (Throwable $error) {
         if ($pdo->inTransaction()) $pdo->rollBack();

@@ -37,7 +37,6 @@ if (preg_match('~^/t/(\d+)(?:-[^/]+)?$~', $path, $match)) {
     $afterFloor = $afterId > 0 ? min((int)$topic['reply_count'] + 1, max(0, (int)($_GET['floor'] ?? 0))) : 0;
     $pages = max(1, (int)ceil(((int)$topic['reply_count'] + 1) / 20));
     if ($pageNo > $pages) fail(404, '页面不存在');
-    if ($pageNo > 1 && $afterId === 0) fail(400, '分页方式已更新，请从主题首页使用游标继续浏览');
     $user = current_user();
     $body = null;
 
@@ -47,7 +46,8 @@ if (preg_match('~^/t/(\d+)(?:-[^/]+)?$~', $path, $match)) {
             $hasMore = count($rows) > 20;
             if ($hasMore) array_pop($rows);
         } else {
-            $rows = h('SELECT p.id,p.user_id,p.body_markdown,p.body_html,p.created_at,u.username FROM posts p JOIN users u ON u.id=p.user_id WHERE p.topic_id=? AND p.status="normal" ORDER BY p.id LIMIT 20', [$id])->fetchAll();
+            $offset = ($pageNo - 1) * 20;
+            $rows = h('SELECT p.id,p.user_id,p.body_markdown,p.body_html,p.created_at,u.username FROM posts p JOIN users u ON u.id=p.user_id WHERE p.topic_id=? AND p.status="normal" ORDER BY p.id LIMIT 20 OFFSET '.$offset, [$id])->fetchAll();
             $hasMore = $pageNo < $pages;
         }
         extension_preload('post.after-body', ['posts'=>$rows, 'topic'=>$topic, 'viewer'=>$user]);
@@ -79,11 +79,9 @@ if (preg_match('~^/t/(\d+)(?:-[^/]+)?$~', $path, $match)) {
         $body .= '</section>';
         if ($afterId > 0) {
             if ($hasMore && $rows) $body .= '<nav class="pagination" aria-label="回复分页"><a class="pagination-next" href="/t/'.$id.'?after='.(int)end($rows)['id'].'&floor='.$floor.'#replies">更多回复</a></nav>';
-        } else {
-            if ($pageNo === 1 && $pages > 1 && $rows) $body .= '<nav class="pagination" aria-label="回复游标分页"><a class="pagination-next" href="/t/'.$id.'?after='.(int)end($rows)['id'].'&floor='.$floor.'#replies">按游标继续浏览</a></nav>';
-        }
+        } else $body .= path_pagination('/t/'.$id, $pageNo, $pages, '#replies');
         if (!empty($topic['is_locked'])) $body .= '<p class="locked-note">该主题已锁定，暂不能回复。</p>';
-        elseif ($user) $body .= '<section class="reply-composer" id="reply-composer" aria-labelledby="reply-composer-title"><div class="reply-composer-heading"><div><p class="eyebrow">YOUR REPLY</p><h2 id="reply-composer-title">参与讨论</h2></div><span>以 '.e($user['username']).' 的身份回复</span></div><div class="reply-quote-note" hidden><strong></strong><blockquote></blockquote></div><form method="post" action="/t/'.$id.'/reply"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" id="reply-to-post" name="reply_to_post" value=""><label class="reply-editor" for="reply-body"><span>回复内容</span><textarea id="reply-body" name="body" maxlength="12000" rows="7" placeholder="写下清晰、友善且有帮助的回复…" required></textarea></label><div class="reply-composer-actions"><small>支持换行纯文本，最多 12,000 字</small><button class="primary">发布回复</button></div></form></section>';
+        elseif ($user) $body .= '<section class="reply-composer" id="reply-composer" aria-labelledby="reply-composer-title"><div class="reply-composer-heading"><div><p class="eyebrow">YOUR REPLY</p><h2 id="reply-composer-title">参与讨论</h2></div><span>以 '.e($user['username']).' 的身份回复</span></div><div class="reply-quote-note" hidden><strong></strong><blockquote></blockquote></div><form method="post" action="/t/'.$id.'/reply"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" id="reply-to-post" name="reply_to_post" value=""><label class="reply-editor" for="reply-body"><span>回复内容</span><textarea id="reply-body" name="body" maxlength="12000" rows="7" placeholder="写下清晰、友善且有帮助的回复…" required></textarea></label>'.extension_slot('reply.create.fields', ['topic'=>$topic, 'user'=>$user]).'<div class="reply-composer-actions"><small>支持换行纯文本，最多 12,000 字</small><button class="primary">发布回复</button></div></form></section>';
     }
 
     count_topic_view($id);
@@ -131,14 +129,13 @@ if (preg_match('~^/c/(\d+)$~', $path, $match)) {
     $topicCount = cached_topic_count('category',$id);
     $pages = max(1, (int)ceil($topicCount / 30));
     if ($pageNo > $pages || $pageNo > 100000) fail(404, '页面不存在');
-    if ($pageNo > 1 && $categoryCursor === '') fail(400, '分页方式已更新，请从分区首页使用游标继续浏览');
     $category = h('SELECT id,title,description FROM categories WHERE id=? AND is_visible=1', [$id])->fetch();
     if (!$category) fail(404, '分区不存在');
     $key = 'category:v3:'.$id.':'.$pageNo.':'.hash('sha256',$categoryCursor).':'.(int)$versions['category-feed:'.$id].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'];
-    $loadRows = static function () use ($id, $categoryCursorData): array {
+    $loadRows = static function () use ($id, $categoryCursorData, $pageNo): array {
         $args=[$id];$where='t.category_id=? AND t.status="normal"';
         if($categoryCursorData){$where.=' AND (t.is_pinned<? OR (t.is_pinned=? AND (t.last_post_at<? OR (t.last_post_at=? AND t.id<?))))';array_push($args,$categoryCursorData['p'],$categoryCursorData['p'],$categoryCursorData['d'],$categoryCursorData['d'],$categoryCursorData['i']);$sql='SELECT t.id,t.title,t.reply_count,t.last_post_at,t.is_pinned,u.username FROM topics t JOIN users u ON u.id=t.user_id WHERE '.$where.' ORDER BY t.is_pinned DESC,t.last_post_at DESC,t.id DESC LIMIT 31';}
-        else{$sql='SELECT t.id,t.title,t.reply_count,t.last_post_at,t.is_pinned,u.username FROM topics t JOIN users u ON u.id=t.user_id WHERE '.$where.' ORDER BY t.is_pinned DESC,t.last_post_at DESC,t.id DESC LIMIT 31';}
+        else{$offset=($pageNo-1)*30;$sql='SELECT t.id,t.title,t.reply_count,t.last_post_at,t.is_pinned,u.username FROM topics t JOIN users u ON u.id=t.user_id WHERE '.$where.' ORDER BY t.is_pinned DESC,t.last_post_at DESC,t.id DESC LIMIT 31 OFFSET '.$offset;}
         return h($sql,$args)->fetchAll();
     };
     $rows = $categoryCursorData === null ? cached($key, 60, $loadRows) : $loadRows();
@@ -146,7 +143,7 @@ if (preg_match('~^/c/(\d+)$~', $path, $match)) {
 
     $body = '<p class="eyebrow">SPACE / '.e($category['title']).'</p><h1>'.e($category['title']).'</h1><p>'.e($category['description']).'</p>';
     foreach ($rows as $topic) $body .= '<article class="topic topic-feed-item'.($topic['is_pinned']?' is-pinned':'').'"><span class="topic-avatar" aria-hidden="true">'.e(text_slice($topic['username'], 0, 1)).'</span><div class="topic-feed-main"><h2><a href="/t/'.(int)$topic['id'].'">'.e($topic['title']).'</a></h2><div class="topic-feed-meta">'.($topic['is_pinned']?'<span class="topic-pinned">置顶</span>':'').'<a class="topic-author" href="/u/'.rawurlencode($topic['username']).'">'.e($topic['username']).'</a><span class="topic-activity">最后活跃</span><time>'.e(substr((string)$topic['last_post_at'],0,16)).'</time></div></div><a class="topic-replies" href="/t/'.(int)$topic['id'].'#replies" aria-label="'.(int)$topic['reply_count'].' 条回复"><strong>'.(int)$topic['reply_count'].'</strong><span>回复</span></a></article>';
-    if($nextCursor!=='')$body.='<nav class="pagination"><a class="pagination-next" href="/c/'.$id.'?cursor='.rawurlencode($nextCursor).'">'.($categoryCursor!==''?'加载更多':'继续浏览').'</a></nav>';
+    $body.=$categoryCursor===''?path_pagination('/c/'.$id,$pageNo,$pages):($nextCursor!==''?'<nav class="pagination"><a class="pagination-next" href="/c/'.$id.'?cursor='.rawurlencode($nextCursor).'">加载更多</a></nav>':'');
     $viewer = $anonymous ? null : current_user();
     public_read_response_cache($viewer);
     if ($anonymous) ob_start();

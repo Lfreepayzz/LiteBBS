@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-const LITEBBS_VERSION = '1.0.0';
+const LITEBBS_VERSION = '1.1.0';
 
 function extension_manifest_admin_path(array $manifest, string $id): ?string {
     if (!array_key_exists('admin_path', $manifest)) return null;
     $path = $manifest['admin_path'];
-    if (!is_string($path) || !preg_match('~^/plugin/'.preg_quote($id, '~').'(?:/[a-z][a-z0-9/_-]{0,127})?$~', $path)) {
+    if (!is_string($path) || !preg_match('/^[a-z][a-z0-9_-]{0,63}$/', $path)) {
         throw new RuntimeException('Invalid plugin admin path.');
     }
     return $path;
@@ -129,7 +129,7 @@ function extension_class_name_valid(string $class): bool {
     return true;
 }
 
-function extension_theme_runtime_valid(string &$directory, string &$name): bool {
+function extension_theme_runtime_valid(string &$directory, string $name): bool {
     static $checked=[];
     if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/',$name) || is_link($directory) || is_link($directory.'/layout.php')) return false;
     if (!is_dir($directory)) {
@@ -137,7 +137,7 @@ function extension_theme_runtime_valid(string &$directory, string &$name): bool 
         $templatesDirectory = dirname($directory);
         foreach (is_dir($templatesDirectory) ? new DirectoryIterator($templatesDirectory) : [] as $item) {
             $folder = $item->getFilename();
-            if (!$item->isDir() || $item->isDot() || !preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $folder)) continue;
+            if (!$item->isDir() || $item->isDot() || $item->isLink() || is_link($item->getPathname().'/layout.php') || !preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $folder)) continue;
             $manifest = json_decode((string)@file_get_contents($item->getPathname().'/theme.json'), true);
             if (($manifest['name'] ?? null) !== $name) continue;
             if ($match !== null) return false;
@@ -145,7 +145,6 @@ function extension_theme_runtime_valid(string &$directory, string &$name): bool 
         }
         if ($match === null) return false;
         $directory = $match['directory'];
-        $name = $match['folder'];
     }
     $signature=@filemtime($directory.'/theme.json').':'.@filesize($directory.'/theme.json').':'.@filemtime($directory.'/layout.php').':'.@filesize($directory.'/layout.php');
     if (isset($checked[$directory])&&$checked[$directory]===$signature) return true;

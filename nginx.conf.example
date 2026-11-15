@@ -37,22 +37,27 @@ server {
         include fastcgi_params;
         fastcgi_param HTTPS on;
         fastcgi_param LITEBBS_X_ACCEL_REDIRECT 1;
-        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        # Use the resolved root so PHP-FPM receives a real path when the site
+        # root is a symlink (a common control-panel deployment pattern).
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param PATH_INFO "";
+        fastcgi_param SCRIPT_FILENAME $realpath_root/index.php;
         fastcgi_pass unix:/run/php/php-fpm.sock;
     }
 
     location = /install.php {
         include fastcgi_params;
         fastcgi_param HTTPS on;
-        fastcgi_param SCRIPT_FILENAME $document_root/install.php;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_param SCRIPT_NAME /install.php;
+        fastcgi_param PATH_INFO "";
+        fastcgi_param SCRIPT_FILENAME $realpath_root/install.php;
         fastcgi_pass unix:/run/php/php-fpm.sock;
     }
 
     location = /install {
-        include fastcgi_params;
-        fastcgi_param HTTPS on;
-        fastcgi_param SCRIPT_FILENAME $document_root/install.php;
-        fastcgi_pass unix:/run/php/php-fpm.sock;
+        return 307 /install.php$is_args$args;
     }
 
     location ~ ^/assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ {
@@ -90,11 +95,14 @@ server {
     location ^~ /logs/ { return 404; }
     location ^~ /uploads/ { return 404; }
     location ^~ /market-packages/ { return 404; }
-    location ~ ^/(?:config\.php.*|.*\.(?:tmp|md|ps1|sh|ini|example|conf)|install\.lock|\.env|\.git) { return 404; }
+    location ~ ^/(?:config\.php.*|.*\.(?:tmp|md|ps1|sh|ini|example|conf|bak|old|orig|swp|zip|tar|gz|tgz|rar|7z)|install\.lock|\.env|\.git) { return 404; }
     location ~ (^|/)private/ { return 404; }
     location ^~ /scripts/ { return 404; }
     location ~ /\. { return 404; }
     location ~ \.php$ { return 404; }
 
+    # Keep the front controller as a fixed existing script. Do not use
+    # index.php/$request_uri or $document_root$fastcgi_script_name here: both
+    # patterns can make PHP-FPM report "No input file specified".
     location / { try_files /__litebbs_no_static_files__ /index.php?$query_string; }
 }

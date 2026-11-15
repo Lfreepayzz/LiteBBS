@@ -7,9 +7,11 @@ final class ZipRemoteAttachmentsPlugin implements LiteBBSPlugin
     {
         $context->assets()->css('assets/style.css');
         $context->slots()->add('topic.create.fields', static fn(array $view): string => '<details class="plugin-attachment-fields"><summary><span><strong>添加 ZIP / 远程附件</strong><small>可选，仅支持一个 ZIP 文件或一个远程 ZIP 地址</small></span><span class="plugin-attachment-badge">ZIP ONLY</span></summary><div class="plugin-attachment-content"><div class="plugin-attachment-heading"><div><h2>选择附件来源</h2><p>本地上传和远程地址二选一，远程文件必须使用 HTTPS。</p></div></div><div class="plugin-attachment-sources"><label><span>本地 ZIP 文件</span><input type="file" name="plugin_zip_attachment" accept=".zip,application/zip,application/x-zip-compressed"><small>单个文件最大 10 MiB</small></label><span class="plugin-attachment-or" aria-hidden="true">或</span><label><span>远程 ZIP 地址</span><input type="url" name="plugin_remote_attachment" maxlength="2048" placeholder="https://example.com/file.zip"><small>仅接受以 .zip 结尾的 HTTPS 地址</small></label></div><div class="plugin-attachment-access"><label><span>下载权限</span><select name="plugin_attachment_access"><option value="login">登录后下载</option><option value="reply">回复主题后下载</option><option value="points">积分购买后下载</option></select><small>下载者需满足所选条件。</small></label><label><span>积分价格</span><input type="number" name="plugin_attachment_points" min="1" max="100000" value="1" inputmode="numeric"><small>仅“积分购买后下载”时扣除积分。</small></label></div></div></details>');
+        $context->slots()->add('post.edit.fields', static function (array $view): string { return zip_attachment_render_edit($view); });
         $context->events()->listen('topic.create.preflight', static function (array $event): void { zip_attachment_prepare_create($event); });
         $context->events()->listen('topic.created', static function (array $event): void { zip_attachment_create($event); });
         $context->events()->listen('post.created', static function (array $event): void { zip_attachment_grant_reply($event); });
+        $context->events()->listen('post.updated', static function (array $event): void { zip_attachment_update($event); });
         $context->preloads()->add('post.after-body', static function (array $view): void { zip_attachment_preload($view); });
         $context->slots()->add('post.after-body', static function (array $view): string { return zip_attachment_render($view); }, 20);
         $context->routes()->add('GET', '~^/plugin/zip-remote-attachments/download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response { return zip_attachment_download((int)$params['id']); });
@@ -96,8 +98,60 @@ function zip_attachment_create(array $event): void
 function zip_attachment_grant_reply(array $event): void
 {
     if (empty($event['topic_id']) || empty($event['user']['id'])) return;
-    $files = h('SELECT id FROM plg_zip_remote_attachments_files WHERE post_id=(SELECT MIN(id) FROM posts WHERE topic_id=?) AND access_mode="reply" AND status="active"', [(int)$event['topic_id']])->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($files as $fileId) h('INSERT IGNORE INTO plg_zip_remote_attachments_grants(user_id,attachment_id,grant_kind,created_at) VALUES(?,?,"reply",UTC_TIMESTAMP(6))', [(int)$event['user']['id'], (int)$fileId]);
+    h('INSERT IGNORE INTO plg_zip_remote_attachments_grants(user_id,attachment_id,grant_kind,created_at) SELECT ?,id,"reply",UTC_TIMESTAMP(6) FROM plg_zip_remote_attachments_files WHERE post_id=(SELECT MIN(id) FROM posts WHERE topic_id=?) AND access_mode="reply" AND status="active"', [(int)$event['user']['id'], (int)$event['topic_id']]);
+}
+
+function zip_attachment_render_edit(array $view): string
+{
+    $post = $view['post'] ?? [];
+    if (empty($post['id'])) return '';
+    $file = h('SELECT * FROM plg_zip_remote_attachments_files WHERE post_id=? AND status="active" ORDER BY id LIMIT 1', [(int)$post['id']])->fetch();
+    $mode = (string)($file['access_mode'] ?? 'login');
+    $points = max(1, (int)($file['point_cost'] ?? 1));
+    $options = '';
+    foreach (['login'=>'登录后下载','reply'=>'回复主题后下载','points'=>'积分购买后下载'] as $value=>$label) {
+        $options .= '<option value="'.$value.'"'.($mode===$value?' selected':'').'>'.$label.'</option>';
+    }
+    $current = $file
+        ? '<div class="plugin-attachment-current"><span>当前附件</span><strong>'.e($file['original_name']).'</strong><small>'.($file['source_kind']==='remote'?'远程 ZIP':'本地 ZIP').'</small><label class="plugin-attachment-remove"><input type="checkbox" name="plugin_attachment_remove" value="1"> 删除当前附件</label></div>'
+        : '<div class="plugin-attachment-current is-empty"><span>当前附件</span><strong>尚未添加附件</strong></div>';
+    return '<details class="plugin-attachment-fields plugin-attachment-edit" open><summary><span><strong>ZIP / 远程附件</strong><small>管理该帖子的附件与下载权限</small></span><span class="plugin-attachment-badge">EDIT</span></summary><div class="plugin-attachment-content">'.$current.'<div class="plugin-attachment-sources plugin-attachment-edit-source"><label><span>'.($file?'替换为远程 ZIP':'添加远程 ZIP').'</span><input type="url" name="plugin_remote_attachment" maxlength="2048" placeholder="https://example.com/file.zip"><small>编辑页支持远程 ZIP；本地 ZIP 请在发布主题时上传。</small></label></div><div class="plugin-attachment-access"><label><span>下载权限</span><select name="plugin_attachment_access">'.$options.'</select><small>下载者需满足所选条件。</small></label><label><span>积分价格</span><input type="number" name="plugin_attachment_points" min="1" max="100000" value="'.$points.'" inputmode="numeric"><small>仅“积分购买后下载”时扣除积分。</small></label></div></div></details>';
+}
+
+function zip_attachment_update(array $event): void
+{
+    $postId = (int)($event['post_id'] ?? 0);
+    if ($postId < 1) return;
+    $remoteInput = filter_input(INPUT_POST, 'plugin_remote_attachment', FILTER_UNSAFE_RAW);
+    $removeInput = filter_input(INPUT_POST, 'plugin_attachment_remove', FILTER_UNSAFE_RAW);
+    $modeInput = filter_input(INPUT_POST, 'plugin_attachment_access', FILTER_UNSAFE_RAW);
+    $pointsInput = filter_input(INPUT_POST, 'plugin_attachment_points', FILTER_UNSAFE_RAW);
+    if ($remoteInput === null && $removeInput === null && $modeInput === null && $pointsInput === null) return;
+
+    $file = h('SELECT * FROM plg_zip_remote_attachments_files WHERE post_id=? AND status="active" ORDER BY id LIMIT 1 FOR UPDATE', [$postId])->fetch();
+    $remote = is_string($remoteInput) ? trim($remoteInput) : '';
+    $remove = is_string($removeInput) && $removeInput === '1';
+    $mode = is_string($modeInput) ? $modeInput : (string)($file['access_mode'] ?? 'login');
+    $points = is_string($pointsInput) ? (int)$pointsInput : (int)($file['point_cost'] ?? 0);
+    if (!in_array($mode, ['login','reply','points'], true) || ($mode === 'points' && ($points < 1 || $points > 100000))) fail(400, '附件访问设置无效');
+    if ($remote !== '' && !zip_attachment_remote_url_valid($remote)) fail(400, '远程附件必须是可公开访问的 HTTPS ZIP 地址');
+    if ($remote !== '' && !$remove && $file) fail(400, '替换附件时请勾选删除当前附件');
+
+    if ($file && ($remove || $remote !== '')) {
+        h('UPDATE plg_zip_remote_attachments_files SET status="removed" WHERE id=?', [(int)$file['id']]);
+        $file = null;
+    } elseif ($file) {
+        if ($mode !== (string)$file['access_mode'] || ($mode === 'points' && $points !== (int)$file['point_cost'])) {
+            h('DELETE FROM plg_zip_remote_attachments_grants WHERE attachment_id=?', [(int)$file['id']]);
+        }
+        h('UPDATE plg_zip_remote_attachments_files SET access_mode=?,point_cost=? WHERE id=?', [$mode,$mode==='points'?$points:0,(int)$file['id']]);
+    }
+    if ($remote !== '') {
+        $name = basename((string)parse_url($remote, PHP_URL_PATH));
+        $ownerId = (int)h('SELECT user_id FROM posts WHERE id=? AND status="normal"', [$postId])->fetchColumn();
+        if ($ownerId < 1) fail(404, '帖子不存在');
+        h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,? ,"remote",NULL,?,?,NULL,NULL,?,?,UTC_TIMESTAMP(6))', [$postId,$ownerId,$remote,$name,$mode,$mode==='points'?$points:0]);
+    }
 }
 
 function zip_attachment_render(array $view): string

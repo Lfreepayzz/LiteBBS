@@ -13,6 +13,7 @@ if ($method === 'POST') {
         if ($report['target_type'] === 'topic') {
             $topic = h('SELECT category_id FROM topics WHERE id=? AND status="normal"', [(int)$report['target_id']])->fetch();
             if ($topic && h('UPDATE topics SET status="deleted" WHERE id=? AND status="normal"', [(int)$report['target_id']])->rowCount() === 1) {
+                extension_event_async('topic.deleted', ['topic_id'=>(int)$report['target_id'],'category_id'=>(int)$topic['category_id'],'post_ids'=>[],'actor_id'=>(int)$actor['id'],'reason'=>'report']);
                 invalidate('topic:'.(int)$report['target_id']);
                 invalidate_topic_listing_cache((int)$topic['category_id'], true);
             }
@@ -20,7 +21,7 @@ if ($method === 'POST') {
         elseif ($report['target_type'] === 'post') {
             $post = h('SELECT p.topic_id,p.status,(SELECT id FROM posts WHERE topic_id=p.topic_id ORDER BY id LIMIT 1) AS first_post_id FROM posts p WHERE p.id=?', [(int)$report['target_id']])->fetch();
             $topicId = (int)($post['topic_id'] ?? 0);
-            if ($post && h('UPDATE posts SET status="deleted" WHERE id=? AND status="normal"', [(int)$report['target_id']])->rowCount() === 1 && $topicId > 0 && (int)$post['first_post_id'] !== (int)$report['target_id']) h('UPDATE topics SET reply_count=GREATEST(reply_count-1,0) WHERE id=?', [$topicId]);
+            if ($post && h('UPDATE posts SET status="deleted" WHERE id=? AND status="normal"', [(int)$report['target_id']])->rowCount() === 1) { extension_event_async('post.deleted', ['post_id'=>(int)$report['target_id'],'topic_id'=>$topicId,'actor_id'=>(int)$actor['id'],'reason'=>'report']); if ($topicId > 0 && (int)$post['first_post_id'] !== (int)$report['target_id']) h('UPDATE topics SET reply_count=GREATEST(reply_count-1,0) WHERE id=?', [$topicId]); }
             if ($topicId > 0) invalidate_topic_read_cache($topicId);
         }
         elseif ($report['target_type'] === 'user') h('UPDATE users SET status="banned" WHERE id=?', [(int)$report['target_id']]);
@@ -29,6 +30,7 @@ if ($method === 'POST') {
     }
     h('UPDATE reports SET status=?,reviewer_id=?,reviewed_at=UTC_TIMESTAMP(6) WHERE id=?', [$status, $actor['id'], $id]);
     audit('report.'.$status, 'report', $id);
+    extension_event_async('report.reviewed', ['report_id'=>$id,'target_type'=>(string)$report['target_type'],'target_id'=>(int)$report['target_id'],'status'=>$status,'actor_id'=>(int)$actor['id']]);
     redirect('/admin/reports');
 }
 $rows = h('SELECT r.*,u.username reporter,p.topic_id target_topic_id,target_user.username target_username FROM reports r JOIN users u ON u.id=r.reporter_id LEFT JOIN posts p ON r.target_type="post" AND p.id=r.target_id LEFT JOIN users target_user ON r.target_type="user" AND target_user.id=r.target_id ORDER BY FIELD(r.status,"open","reviewed","dismissed"),r.id DESC LIMIT 100')->fetchAll();

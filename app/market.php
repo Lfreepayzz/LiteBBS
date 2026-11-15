@@ -23,7 +23,7 @@ if (preg_match('~^/market/package/(\d+)$~',$path,$m)&&$method==='GET') {
 if ($path === '/market' && $method === 'GET') {
     $items = h('SELECT id,kind,package_name,title,version,summary,sha256 FROM market_submissions WHERE status="approved" ORDER BY id DESC LIMIT 100')->fetchAll();
     $user = current_user();
-    $body = '<header class="market-heading"><div><p class="eyebrow">DEVELOPER COMMUNITY</p><h1>开发者</h1><p>发现社区开发者提交的插件与主题。所有作品均经过管理员审核后公开。</p></div><a class="primary market-submit-link" href="'.($user ? '/market/submit' : '/login').'">'.($user ? '发布作品' : '登录后发布').'</a></header><section class="market-grid" aria-label="已审核开发者作品">';
+    $body = '<header class="market-heading"><div><h1>开发者</h1><p>发现社区开发者提交的插件与主题。所有作品均经过管理员审核后公开。</p></div><a class="primary market-submit-link" href="'.($user ? '/market/submit' : '/login').'">'.($user ? '发布作品' : '登录后发布').'</a></header><section class="market-grid" aria-label="已审核开发者作品">';
     if (!$items) $body .= '<div class="market-empty"><h2>还没有公开作品</h2><p>成为第一个向社区分享插件或主题的开发者。</p>'.($user ? '<a href="/market/submit">提交一个作品</a>' : '<a href="/login">登录后提交</a>').'</div>';
     foreach ($items as $item) {
         $kind = $item['kind'] === 'theme' ? '主题' : '插件';

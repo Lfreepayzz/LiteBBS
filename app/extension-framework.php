@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/extension-hooks.php';
 
-const LITEBBS_EXTENSION_API_VERSION = '1.0';
+const LITEBBS_EXTENSION_API_VERSION = '2.1';
 
 interface LiteBBSPlugin
 {
@@ -21,8 +22,20 @@ final class PluginContext
     public function preloads(): PluginPreloadRegistrar { return new PluginPreloadRegistrar($this->id, $this->registry); }
     public function events(): PluginEventRegistrar { return new PluginEventRegistrar($this->id, $this->registry); }
     public function assets(): PluginAssetRegistrar { return new PluginAssetRegistrar($this->id, $this->registry); }
+    public function content(): PluginContentRegistrar { return new PluginContentRegistrar($this->id, $this->registry); }
+    public function filters(): PluginFilterRegistrar { return new PluginFilterRegistrar($this->id, $this->registry); }
     public function database(): PluginDatabase { return new PluginDatabase($this->id); }
     public function logger(): PluginLogger { return new PluginLogger($this->id); }
+    public function settings(): PluginSettings { return new PluginSettings($this->id, $this->registry); }
+    public function cache(): PluginCache { return new PluginCache($this->id); }
+    public function admin(): PluginAdminRegistrar { return new PluginAdminRegistrar($this->id, $this->registry); }
+    public function forms(): PluginForms { return new PluginForms(); }
+    public function tasks(): PluginTaskRegistrar { return new PluginTaskRegistrar($this->id, $this->registry); }
+    public function metrics(): PluginMetrics { return new PluginMetrics($this->id); }
+    public function uploads(): PluginUploads { return new PluginUploads($this->id); }
+    public function notifications(): PluginNotifications { return new PluginNotifications($this->id); }
+    public function search(): PluginSearchRegistrar { return new PluginSearchRegistrar($this->id, $this->registry); }
+    public function userFields(): PluginUserFields { return new PluginUserFields($this->id, $this->registry); }
     public function config(): array { return $this->registry['plugins'][$this->id]['config'] ?? []; }
 }
 
@@ -32,11 +45,12 @@ final class PluginRouteRegistrar
 
     public function __construct(private string $id, array &$registry) { $this->registry =& $registry; }
 
-    public function add(string|array $methods, string $pattern, callable $handler): void
+    public function add(string|array $methods, string $pattern, callable $handler, array $options = []): void
     {
-        $methods = (array)$methods;
+        $methods = array_map('strtoupper', (array)$methods);
         extension_validate_plugin_route($this->id, $methods, $pattern);
-        $this->registry['routes'][] = ['plugin'=>$this->id, 'methods'=>$methods, 'pattern'=>$pattern, 'handler'=>$handler];
+        $options = extension_route_options($methods, $options);
+        $this->registry['routes'][] = ['plugin'=>$this->id, 'methods'=>$methods, 'pattern'=>$pattern, 'handler'=>$handler, 'options'=>$options];
     }
 }
 
@@ -85,10 +99,93 @@ final class PluginAssetRegistrar
 
     public function __construct(private string $id, array &$registry) { $this->registry =& $registry; }
 
-    public function css(string $path): void
+    public function css(string $path, array $pages = ['all']): void
     {
         if (!preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9._-]+)*\.css$~', $path)) throw new InvalidArgumentException('Invalid plugin CSS asset.');
-        $this->registry['assets'][] = ['plugin'=>$this->id, 'path'=>$path, 'type'=>'css'];
+        $this->registry['assets'][] = ['plugin'=>$this->id, 'path'=>$path, 'type'=>'css', 'pages'=>extension_asset_pages($pages)];
+    }
+
+    public function js(string $path, array $pages = ['all']): void
+    {
+        if (!preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9._-]+)*\.js$~', $path)) throw new InvalidArgumentException('Invalid plugin JavaScript asset.');
+        $this->registry['assets'][] = ['plugin'=>$this->id, 'path'=>$path, 'type'=>'js', 'pages'=>extension_asset_pages($pages)];
+    }
+}
+
+final class PluginContentRegistrar
+{
+    private array $registry;
+
+    public function __construct(private string $id, array &$registry) { $this->registry =& $registry; }
+
+    public function markdown(callable $renderer, int $priority = 0): void
+    {
+        $this->registry['renderers']['post.markdown'][] = ['plugin'=>$this->id, 'priority'=>$priority, 'renderer'=>$renderer];
+    }
+}
+
+final class PluginFilterRegistrar
+{
+    private array $registry;
+
+    public function __construct(private string $id, array &$registry) { $this->registry =& $registry; }
+
+    public function add(string $filter, callable $handler, int $priority = 0): void
+    {
+        if (!preg_match('/^[a-z][a-z0-9._-]{1,63}$/', $filter)) throw new InvalidArgumentException('Invalid plugin filter.');
+        $this->registry['filters'][$filter][] = ['plugin'=>$this->id, 'priority'=>$priority, 'handler'=>$handler];
+    }
+}
+
+final class PluginSettings
+{
+    private array $registry;
+
+    public function __construct(private string $id, array &$registry) { $this->registry =& $registry; }
+
+    public function get(): array { return $this->registry['plugins'][$this->id]['config'] ?? []; }
+
+    public function save(array $config): void
+    {
+        if (!extension_config_value_valid($config)) throw new InvalidArgumentException('Plugin configuration must contain JSON-compatible scalar values, arrays, and objects only.');
+        $json = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        if (strlen($json) > 65535) throw new InvalidArgumentException('Plugin configuration exceeds 64 KiB.');
+        h('UPDATE plugins SET config_json=? WHERE name=? AND enabled=1', [$json, $this->id]);
+        if (!h('SELECT 1 FROM plugins WHERE name=? AND enabled=1', [$this->id])->fetchColumn()) throw new RuntimeException('Plugin configuration could not be saved.');
+        $this->registry['plugins'][$this->id]['config'] = $config;
+        audit('plugin.config.updated', 'plugin', null, ['name'=>$this->id]);
+        extension_invalidate('plugins');
+    }
+}
+
+final class PluginCache
+{
+    public function __construct(private string $id) {}
+
+    public function remember(string $key, int $ttl, callable $loader): mixed
+    {
+        $key = $this->key($key);
+        $state =& request_cache_state();
+        $existing = read_cache($key, max(1, min(86400, $ttl)));
+        if ($existing !== null) {
+            $state['@plugin-cache-hits:'.$this->id] = ((int)($state['@plugin-cache-hits:'.$this->id] ?? 0)) + 1;
+            return $existing['value'] ?? null;
+        }
+        $state['@plugin-cache-misses:'.$this->id] = ((int)($state['@plugin-cache-misses:'.$this->id] ?? 0)) + 1;
+        $value = cached($key, max(1, min(86400, $ttl)), static function () use ($loader): array {
+            $loaded = $loader();
+            if (!extension_config_value_valid($loaded)) throw new RuntimeException('Plugin cache values must be JSON-compatible.');
+            return ['value'=>$loaded];
+        });
+        return $value['value'] ?? null;
+    }
+
+    public function forget(string $key): void { invalidate($this->key($key)); }
+
+    private function key(string $key): string
+    {
+        if (!preg_match('/^[a-z][a-z0-9._:-]{0,95}$/', $key)) throw new InvalidArgumentException('Invalid plugin cache key.');
+        return 'plugin:'.$this->id.':'.$key;
     }
 }
 
@@ -108,8 +205,10 @@ final class PluginDatabase
     {
         $normalized = trim($sql);
         if (str_contains($normalized, ';') || !preg_match('/^(SELECT|INSERT|UPDATE|DELETE)\b/i', $normalized) || preg_match('/\b(?:ALTER|CREATE|DROP|TRUNCATE|GRANT|REVOKE|RENAME|CALL|LOAD|INTO\s+OUTFILE|INTO\s+DUMPFILE)\b/i', $normalized)) throw new RuntimeException('Plugin queries must be a single DML statement on plugin tables; use migrations for schema changes.');
-        preg_match_all('/\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+(`?[a-zA-Z0-9_]+`?)/i', $normalized, $matches);
+        preg_match_all('/\b(?:FROM|JOIN|INTO)\s+(`?[a-zA-Z0-9_]+`?)/i', $normalized, $matches);
         $tables = array_map(static fn(string $table): string => trim($table, '`'), $matches[1] ?? []);
+        if (preg_match('/^UPDATE\s+(`?[a-zA-Z0-9_]+`?)/i', $normalized, $update)) $tables[] = trim($update[1], '`');
+        $tables = array_values(array_unique($tables));
         if (!$tables) throw new RuntimeException('Plugin query must reference a plugin table.');
         foreach ($tables as $table) if (!str_starts_with($table, $this->prefix)) throw new RuntimeException('Plugin queries may only reference the plugin table prefix.');
         return h($normalized, $parameters);
@@ -125,7 +224,7 @@ final class PluginLogger
 
 function &extension_registry(): array
 {
-    static $registry = ['plugins'=>[], 'routes'=>[], 'slots'=>[], 'events'=>[], 'assets'=>[], 'preloads'=>[]];
+    static $registry = ['plugins'=>[], 'routes'=>[], 'slots'=>[], 'events'=>[], 'assets'=>[], 'preloads'=>[], 'renderers'=>[], 'filters'=>[], 'admin_pages'=>[], 'tasks'=>[], 'search'=>[], 'user_fields'=>[]];
     return $registry;
 }
 
@@ -137,7 +236,7 @@ function extension_config_decode(string $json): array
 
 function extension_manifest_hooks(array $manifest, string $kind): ?array
 {
-    $key = $kind === 'slot' ? 'slots' : 'events';
+    $key = match($kind) { 'slot' => 'slots', 'preload'=>'preloads', 'event' => 'events', 'renderer' => 'renderers', 'filter'=>'filters', default => throw new InvalidArgumentException('Invalid plugin hook kind.') };
     if (!isset($manifest['hooks']) || !is_array($manifest['hooks']) || !array_key_exists($key, $manifest['hooks'])) return null;
     $hooks = $manifest['hooks'][$key];
     if (!is_array($hooks)) throw new RuntimeException('Plugin '.$key.' declaration must be an array.');
@@ -153,10 +252,48 @@ function extension_manifest_assets(array $manifest): ?array
     if (!is_array($manifest['assets'])) throw new RuntimeException('Plugin assets declaration must be an array.');
     $assets = [];
     foreach ($manifest['assets'] as $asset) {
-        if (!is_string($asset) || !preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9._-]+)*\.css$~', $asset)) throw new RuntimeException('Invalid plugin asset declaration.');
-        $assets[] = $asset;
+        if (is_string($asset)) { $path = $asset; $pages = ['all']; }
+        elseif (is_array($asset)) { $path = (string)($asset['path'] ?? ''); $pages = $asset['pages'] ?? ['all']; }
+        else throw new RuntimeException('Invalid plugin asset declaration.');
+        if (!preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9._-]+)*\.(css|js)$~', $path)) throw new RuntimeException('Invalid plugin asset declaration.');
+        $assets[] = ['path'=>$path, 'type'=>strtolower((string)pathinfo($path, PATHINFO_EXTENSION)), 'pages'=>extension_asset_pages(is_array($pages) ? $pages : [])];
     }
-    return array_values(array_unique($assets));
+    $unique = [];
+    foreach ($assets as $asset) $unique[$asset['path'].'|'.implode(',', $asset['pages'])] = $asset;
+    return array_values($unique);
+}
+
+function extension_asset_pages(array $pages): array
+{
+    $allowed = ['all','home','category','topic.view','topic.create','post.edit','profile','member','search','plugin','admin'];
+    if (!$pages || count($pages) > 16) throw new InvalidArgumentException('Invalid plugin asset page declaration.');
+    foreach ($pages as $page) if (!is_string($page) || !in_array($page, $allowed, true)) throw new InvalidArgumentException('Invalid plugin asset page declaration.');
+    return array_values(array_unique($pages));
+}
+
+function extension_asset_matches(array $asset, string $path): bool
+{
+    $surfaces = ['all'];
+    if ($path === '/') $surfaces[] = 'home';
+    elseif ($path === '/new') $surfaces[] = 'topic.create';
+    elseif (preg_match('~^/t/[0-9]+$~', $path)) $surfaces[] = 'topic.view';
+    elseif (preg_match('~^/p/[0-9]+/edit$~', $path)) $surfaces[] = 'post.edit';
+    elseif (preg_match('~^/c/[0-9]+$~', $path)) $surfaces[] = 'category';
+    elseif (str_starts_with($path, '/u/')) $surfaces[] = 'profile';
+    elseif ($path === '/me') $surfaces[] = 'member';
+    elseif ($path === '/search') $surfaces[] = 'search';
+    elseif (str_starts_with($path, '/plugin/')) $surfaces[] = 'plugin';
+    elseif ($path === '/admin' || str_starts_with($path, '/admin/')) $surfaces[] = 'admin';
+    return (bool)array_intersect($asset['pages'] ?? ['all'], $surfaces);
+}
+
+function extension_config_value_valid(mixed $value, int $depth = 0): bool
+{
+    if ($depth > 12) return false;
+    if ($value === null || is_bool($value) || is_int($value) || is_float($value) || is_string($value)) return true;
+    if (!is_array($value)) return false;
+    foreach ($value as $key => $item) if ((!is_int($key) && (!is_string($key) || strlen($key) > 128)) || !extension_config_value_valid($item, $depth + 1)) return false;
+    return true;
 }
 
 function extension_plugin_manifest(string $id): ?array
@@ -189,37 +326,63 @@ function extension_candidate_plugins(string $kind, ?string $hook): array
 {
     $enabled = extension_enabled_plugins();
     if ($hook === null) return $enabled;
-    static $candidateCache = [];
-    $scanKey = cache_version('plugins').':'.$kind.':'.$hook;
-    if (array_key_exists($scanKey, $candidateCache)) return $candidateCache[$scanKey];
+    static $indexes = [];
+    $scanKey = cache_version('plugins').':'.$kind;
+    if (isset($indexes[$scanKey])) return array_merge($indexes[$scanKey]['fallback'], $indexes[$scanKey]['hooks'][$hook] ?? []);
     $root = dirname(__DIR__).'/plugins/';
-    $candidates = [];
+    $index = ['fallback'=>[], 'hooks'=>[]];
     foreach ($enabled as $record) {
         $id = (string)($record['name'] ?? '');
         if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
         $manifestFile = $root.$id.'/plugin.json';
         if (!is_file($manifestFile)) {
-            $candidates[] = $record;
+            $index['fallback'][] = $record;
             continue;
         }
         try {
             $manifest = extension_plugin_manifest($id);
             if (!is_array($manifest)) throw new RuntimeException('Invalid plugin manifest.');
             $hooks = extension_manifest_hooks($manifest, $kind);
-            if ($hooks === null || in_array($hook, $hooks, true)) $candidates[] = $record;
+            if ($hooks === null) $index['fallback'][] = $record;
+            else foreach ($hooks as $declaredHook) $index['hooks'][$declaredHook][] = $record;
         } catch (Throwable $error) {
             error_log('extension manifest '.$id.' failed: '.$error->getMessage());
         }
     }
-    return $candidateCache[$scanKey] = $candidates;
+    $indexes[$scanKey] = $index;
+    return array_merge($index['fallback'], $index['hooks'][$hook] ?? []);
 }
 
 function extension_validate_plugin_route(string $id, array $methods, string $pattern): void
 {
-    if (!$methods || array_diff($methods, ['GET','POST','PUT','PATCH','DELETE','OPTIONS']) || count($methods) !== count(array_unique($methods))) throw new InvalidArgumentException('Invalid plugin route methods.');
+    if (!$methods || array_diff($methods, ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS']) || count($methods) !== count(array_unique($methods))) throw new InvalidArgumentException('Invalid plugin route methods.');
     if (str_contains($pattern, "\0") || preg_match('/[\r\n]/', $pattern) || !preg_match('~^(.)(.*)\\1([a-z]*)$~sD', $pattern, $match)) throw new InvalidArgumentException('Invalid plugin route pattern.');
     $body = $match[2];
     if (!preg_match('~^\^/plugin/'.preg_quote($id, '~').'(?:/|\$)~', $body) || !str_ends_with($body, '$') || str_contains($body, '|') || @preg_match($pattern, '') === false) throw new InvalidArgumentException('Plugin routes must be exact routes within their namespace.');
+}
+
+function extension_route_options(array $methods, array $options): array
+{
+    $unknown = array_diff(array_keys($options), ['auth', 'csrf']);
+    if ($unknown) throw new InvalidArgumentException('Unknown plugin route option.');
+    $auth = (string)($options['auth'] ?? 'public');
+    if (!in_array($auth, ['public', 'user', 'moderator', 'admin'], true)) throw new InvalidArgumentException('Invalid plugin route authorization.');
+    $csrf = (bool)($options['csrf'] ?? false);
+    if ($csrf && $methods !== ['POST']) throw new InvalidArgumentException('Plugin CSRF enforcement requires a POST-only route.');
+    return ['auth'=>$auth, 'csrf'=>$csrf];
+}
+
+function extension_authorize_route(array $options): void
+{
+    $auth = (string)($options['auth'] ?? 'public');
+    if ($auth === 'admin') {
+        admin();
+    } elseif ($auth !== 'public') {
+        $user = current_user();
+        if (!$user) redirect('/login');
+        if ($auth === 'moderator' && !in_array((string)($user['role'] ?? ''), ['moderator', 'admin'], true)) fail(403, '无权访问');
+    }
+    if (!empty($options['csrf'])) require_post();
 }
 
 function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = null, ?string $hook = null): array
@@ -242,18 +405,32 @@ function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = 
             $entryFile = extension_v2_entry_file($root.$id, $entry);
             if (($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $id || $entryFile === null || !extension_class_name_valid($class)) throw new RuntimeException('Invalid plugin manifest.');
             extension_manifest_hooks($manifest, 'slot');
+            extension_manifest_hooks($manifest, 'preload');
             extension_manifest_hooks($manifest, 'event');
+            extension_manifest_hooks($manifest, 'renderer');
+            extension_manifest_hooks($manifest, 'filter');
             extension_manifest_assets($manifest);
             extension_manifest_admin_path($manifest, $id);
+            extension_manifest_relationships($manifest);
             require_once $entryFile;
             $plugin = new $class();
             if (!$plugin instanceof LiteBBSPlugin) throw new RuntimeException('Plugin entry must implement LiteBBSPlugin.');
             $config = extension_config_decode((string)($record['config_json'] ?? '{}'));
-            $temporary = ['plugins'=>[$id=>['config'=>$config]], 'routes'=>[], 'slots'=>[], 'events'=>[], 'assets'=>[], 'preloads'=>[]];
+            $temporary = ['plugins'=>[$id=>['config'=>$config]], 'routes'=>[], 'slots'=>[], 'events'=>[], 'assets'=>[], 'preloads'=>[], 'renderers'=>[], 'filters'=>[], 'admin_pages'=>[], 'tasks'=>[], 'search'=>[], 'user_fields'=>[]];
             $context = new PluginContext($id, $temporary);
-            $plugin->boot($context);
-            foreach (['routes','slots','events','assets','preloads'] as $key) {
-                if ($key === 'slots' || $key === 'events' || $key === 'preloads') foreach ($temporary[$key] as $slot => $entries) $registry[$key][$slot] = array_merge($registry[$key][$slot] ?? [], $entries);
+            $outputLevel = ob_get_level();
+            ob_start();
+            try { $plugin->boot($context); $bootOutput = (string)ob_get_clean(); }
+            catch (Throwable $error) { while (ob_get_level() > $outputLevel) ob_end_clean(); throw $error; }
+            if ($bootOutput !== '') throw new RuntimeException('Plugin boot must not produce output.');
+            foreach (['slot'=>'slots','preload'=>'preloads','event'=>'events','renderer'=>'renderers','filter'=>'filters'] as $kind => $key) {
+                $declared = extension_manifest_hooks($manifest, $kind);
+                if ($declared === null) continue;
+                $registered = array_keys($temporary[$key]);
+                if (array_diff($registered, $declared)) throw new RuntimeException('Plugin '.$key.' registration is missing from the manifest declaration.');
+            }
+            foreach (['routes','slots','events','assets','preloads','renderers','filters','admin_pages','tasks','search','user_fields'] as $key) {
+                if (in_array($key, ['slots','events','preloads','renderers','filters'], true)) foreach ($temporary[$key] as $slot => $entries) $registry[$key][$slot] = array_merge($registry[$key][$slot] ?? [], $entries);
                 else $registry[$key] = array_merge($registry[$key], $temporary[$key]);
             }
             $registry['plugins'][$id] = ['manifest'=>$manifest, 'plugin'=>$plugin, 'config'=>$config];
@@ -262,6 +439,14 @@ function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = 
         }
     }
     foreach ($registry['slots'] as &$entries) {
+        usort($entries, static fn(array $a, array $b): int => $b['priority'] <=> $a['priority']);
+    }
+    unset($entries);
+    foreach ($registry['renderers'] as &$entries) {
+        usort($entries, static fn(array $a, array $b): int => $b['priority'] <=> $a['priority']);
+    }
+    unset($entries);
+    foreach ($registry['filters'] as &$entries) {
         usort($entries, static fn(array $a, array $b): int => $b['priority'] <=> $a['priority']);
     }
     unset($entries);
@@ -275,8 +460,16 @@ function extension_runtime_register_routes(\LiteBBS\Framework\Router $router, ?s
         if ($onlyPlugin !== null && $route['plugin'] !== $onlyPlugin) continue;
         $router->add($route['methods'], $route['pattern'], static function (\LiteBBS\Framework\Request $request, \LiteBBS\Framework\Container $container, array $params) use ($route): \LiteBBS\Framework\Response {
             try {
-                $result = ($route['handler'])($request, $params);
-                return $result instanceof \LiteBBS\Framework\Response ? $result : new \LiteBBS\Framework\Response(is_string($result) ? $result : '');
+                extension_authorize_route($route['options'] ?? []);
+                $outputLevel = ob_get_level();
+                ob_start();
+                try { $result = ($route['handler'])($request, $params); $output = (string)ob_get_clean(); }
+                catch (Throwable $error) { while (ob_get_level() > $outputLevel) ob_end_clean(); throw $error; }
+                if ($result instanceof \LiteBBS\Framework\Response) {
+                    if ($output !== '') $result->body = $output.$result->body;
+                    return $result;
+                }
+                return new \LiteBBS\Framework\Response($output.(is_string($result) ? $result : ''));
             } catch (Throwable $error) {
                 if ($error instanceof \LiteBBS\Framework\ResponseHalt) return $error->response;
                 error_log('plugin route '.$route['plugin'].' failed: '.$error->getMessage());
@@ -284,22 +477,69 @@ function extension_runtime_register_routes(\LiteBBS\Framework\Router $router, ?s
             }
         });
     }
+    foreach (extension_registry()['admin_pages'] as $adminPage) {
+        if ($onlyPlugin !== null && $adminPage['plugin'] !== $onlyPlugin) continue;
+        if (!empty($adminPage['plugin_management'])) continue;
+        $router->add(['GET','POST'], '~^'.preg_quote($adminPage['path'], '~').'$~', static function (\LiteBBS\Framework\Request $request) use ($adminPage): \LiteBBS\Framework\Response {
+            try {
+                $user = current_user();
+                if (!$user) redirect('/login');
+                if ($adminPage['permission'] === 'admin' && ($user['role'] ?? '') !== 'admin') fail(403, '无权访问');
+                if ($adminPage['permission'] === 'moderator' && !in_array((string)($user['role'] ?? ''), ['moderator','admin'], true)) fail(403, '无权访问');
+                if ($request->method === 'POST') require_post();
+                $result = ($adminPage['handler'])($request);
+                if (!is_array($result) || !isset($result['body'])) throw new RuntimeException('Admin page handler must return a body array.');
+                if ($request->method === 'POST' && $adminPage['audit'] !== '') audit($adminPage['audit'], 'plugin', null, ['name'=>$adminPage['plugin']]);
+                ob_start();
+                page((string)($result['title'] ?? $adminPage['title']), (string)$result['body'], '', false, true);
+                return new \LiteBBS\Framework\Response((string)ob_get_clean());
+            } catch (\LiteBBS\Framework\ResponseHalt $halt) { return $halt->response; }
+            catch (Throwable $error) { error_log('plugin admin '.$adminPage['plugin'].' failed: '.$error->getMessage()); return new \LiteBBS\Framework\Response('Plugin temporarily unavailable.', 503); }
+        });
+    }
+}
+
+function extension_plugin_management_path(string $id, ?string $declaredPath = null): ?string
+{
+    $page = extension_plugin_management_page($id, null, $declaredPath);
+    if ($page === null) return null;
+    return '/admin/plugins?plugin='.rawurlencode($id).'&page='.rawurlencode((string)$page['management_page']);
+}
+
+function extension_plugin_management_page(string $id, ?string $pageName = null, ?string $declaredPath = null): ?array
+{
+    if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) return null;
+    if ($pageName !== null && !preg_match('/^[a-z][a-z0-9_-]{0,63}$/', $pageName)) return null;
+    extension_runtime_load($id);
+    $fallback = null;
+    foreach (extension_registry()['admin_pages'] as $page) {
+        if (($page['plugin'] ?? '') !== $id || empty($page['plugin_management'])) continue;
+        if ($declaredPath !== null && (($page['management_page'] ?? '') === $declaredPath || ($page['path'] ?? '') === $declaredPath)) return $page;
+        if ($pageName !== null && ($page['management_page'] ?? '') === $pageName) return $page;
+        if (!empty($page['plugin_management_default'])) $fallback = $page;
+        elseif ($fallback === null) $fallback = $page;
+    }
+    if ($declaredPath !== null) throw new RuntimeException('Plugin admin_path is not registered through the management page API.');
+    return $pageName === null ? $fallback : null;
 }
 
 function extension_slot(string $slot, array $view = []): string
 {
     $registry =& extension_registry();
-    if (!isset($registry['slots'][$slot])) extension_runtime_load(null, 'slot', $slot);
+    extension_runtime_load(null, 'slot', $slot);
     $entries = $registry['slots'][$slot] ?? [];
     $html = '';
     foreach ($entries as $entry) {
         if (extension_plugin_degraded($entry['plugin'])) continue;
         $started = microtime(true);
+        $beforeSql=(int)(request_cache_state()['@sql-count']??0);
         try {
             $output = ($entry['renderer'])($view);
             if (is_string($output)) $html .= $output;
             if ((microtime(true) - $started) > 0.02) { error_log('plugin slot '.$entry['plugin'].' exceeded 20ms budget'); extension_plugin_failure($entry['plugin']); }
+            extension_metric_observe($entry['plugin'],'slot.'.$slot,(microtime(true)-$started)*1000,(int)(request_cache_state()['@sql-count']??0)-$beforeSql,false);
         } catch (Throwable $error) {
+            extension_metric_observe($entry['plugin'],'slot.'.$slot,(microtime(true)-$started)*1000,(int)(request_cache_state()['@sql-count']??0)-$beforeSql,true);
             error_log('plugin slot '.$entry['plugin'].' failed: '.$error->getMessage());
             extension_plugin_failure($entry['plugin']);
         }
@@ -309,7 +549,7 @@ function extension_slot(string $slot, array $view = []): string
 
 function extension_preload(string $slot, array $view = []): void
 {
-    extension_runtime_load(null, 'slot', $slot);
+    extension_runtime_load(null, 'preload', $slot);
     foreach (extension_registry()['preloads'][$slot] ?? [] as $entry) {
         if (extension_plugin_degraded($entry['plugin'])) continue;
         $started=microtime(true);
@@ -320,6 +560,7 @@ function extension_preload(string $slot, array $view = []): void
 
 function extension_event(string $event, array $payload): void
 {
+    extension_validate_hook_payload($event,$payload);
     extension_runtime_load(null, 'event', $event);
     foreach (extension_registry()['events'][$event] ?? [] as $entry) {
         if (extension_plugin_degraded($entry['plugin'])) continue;
@@ -330,8 +571,9 @@ function extension_event(string $event, array $payload): void
 
 function extension_event_or_fail(string $event, array $payload): void
 {
+    extension_validate_hook_payload($event,$payload);
     $registry =& extension_registry();
-    if (!isset($registry['events'][$event])) extension_runtime_load(null, 'event', $event);
+    extension_runtime_load(null, 'event', $event);
     foreach ($registry['events'][$event] ?? [] as $entry) {
         if (extension_plugin_degraded($entry['plugin'])) continue;
         try {
@@ -345,6 +587,8 @@ function extension_event_or_fail(string $event, array $payload): void
 
 function extension_event_sync(string $event, array $payload): void
 {
+    extension_validate_hook_payload($event,$payload);
+    $contract=extension_hook_contract('event',$event);static $deprecated=[];if(!empty($contract['sensitive'])&&!isset($deprecated[$event])){$deprecated[$event]=true;error_log('deprecated sensitive extension event dispatched: '.$event);}
     extension_runtime_load(null, 'event', $event);
     foreach (extension_registry()['events'][$event] ?? [] as $entry) {
         if (extension_plugin_degraded($entry['plugin'])) continue;
@@ -353,6 +597,68 @@ function extension_event_sync(string $event, array $payload): void
         catch (\LiteBBS\Framework\ResponseHalt $error) { extension_plugin_failure($entry['plugin']); throw $error; }
         catch (Throwable $error) { error_log('plugin sync event '.$entry['plugin'].' failed: '.$error->getMessage()); extension_plugin_failure($entry['plugin']); throw new RuntimeException('Plugin event '.$entry['plugin'].' failed.', 0, $error); }
     }
+}
+
+function extension_event_async(string $event, array $payload, int $delaySeconds = 0): void
+{
+    extension_validate_async_event_payload($event,$payload);
+    try {
+        if (!extension_config_value_valid($payload)) throw new InvalidArgumentException('Async plugin event payload must be JSON-compatible.');
+        if (!extension_has_listeners('event', $event)) return;
+        enqueue_outbox_event($event, $payload, max(0, min(86400, $delaySeconds)));
+    } catch (Throwable $error) {
+        error_log('plugin async event '.$event.' enqueue failed: '.$error->getMessage());
+    }
+}
+
+function extension_has_listeners(string $kind, string $hook): bool
+{
+    static $known = [];
+    $key = cache_version('plugins').':'.$kind.':'.$hook;
+    if (array_key_exists($key, $known)) return $known[$key];
+    return $known[$key] = (bool)extension_candidate_plugins($kind, $hook);
+}
+
+function extension_render_post_body(string $markdown, array $context = []): string
+{
+    $registry =& extension_registry();
+    extension_runtime_load(null, 'renderer', 'post.markdown');
+    foreach ($registry['renderers']['post.markdown'] ?? [] as $entry) {
+        if (extension_plugin_degraded($entry['plugin'])) continue;
+        $started = microtime(true);
+        try {
+            $html = ($entry['renderer'])($markdown, $context);
+            if (!is_string($html) || strlen($html) > 1048576) throw new RuntimeException('Post renderer returned invalid output.');
+            if ((microtime(true) - $started) > 0.1) {
+                error_log('plugin renderer '.$entry['plugin'].' exceeded 100ms budget');
+                extension_plugin_failure($entry['plugin']);
+            }
+            return extension_filter('post.rendered', $html, $context + ['markdown'=>$markdown]);
+        } catch (Throwable $error) {
+            error_log('plugin renderer '.$entry['plugin'].' failed: '.$error->getMessage());
+            extension_plugin_failure($entry['plugin']);
+        }
+    }
+    return extension_filter('post.rendered', render_md($markdown), $context + ['markdown'=>$markdown]);
+}
+
+function extension_filter(string $filter, string $value, array $context = []): string
+{
+    extension_runtime_load(null, 'filter', $filter);
+    foreach (extension_registry()['filters'][$filter] ?? [] as $entry) {
+        if (extension_plugin_degraded($entry['plugin'])) continue;
+        $started = microtime(true);
+        try {
+            $filtered = ($entry['handler'])($value, $context);
+            if (!is_string($filtered) || strlen($filtered) > 1048576) throw new RuntimeException('Plugin filter returned invalid output.');
+            $value = $filtered;
+            if ((microtime(true) - $started) > 0.1) { error_log('plugin filter '.$entry['plugin'].' exceeded 100ms budget'); extension_plugin_failure($entry['plugin']); }
+        } catch (Throwable $error) {
+            error_log('plugin filter '.$entry['plugin'].' failed: '.$error->getMessage());
+            extension_plugin_failure($entry['plugin']);
+        }
+    }
+    return $value;
 }
 
 function extension_invalidate(string $key): void
@@ -379,7 +685,7 @@ function extension_plugin_failure(string $id): void
     catch (Throwable $error) { cache_error('plugin health write failed: '.$error->getMessage()); }
 }
 
-function extension_stylesheets(): string
+function extension_stylesheets(string $requestPath, ?string $onlyPlugin = null): string
 {
     $records = extension_enabled_plugins();
     $root = dirname(__DIR__).'/plugins/';
@@ -387,6 +693,7 @@ function extension_stylesheets(): string
     $manifestById = [];
     foreach ($records as $record) {
         $id = (string)($record['name'] ?? '');
+        if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
         if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
         $manifestFile = $root.$id.'/plugin.json';
         if (!is_file($manifestFile)) { $fallback = true; continue; }
@@ -398,28 +705,61 @@ function extension_stylesheets(): string
             $fallback = true;
         }
     }
-    if ($fallback) extension_runtime_load();
+    if ($fallback) extension_runtime_load($onlyPlugin);
     $html = '';
     $declared = [];
     foreach ($records as $record) {
         $id = (string)($record['name'] ?? '');
+        if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
         if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
-        $plugin = extension_registry()['plugins'][$id] ?? null;
         $manifest = $manifestById[$id] ?? null;
         $paths = is_array($manifest) ? extension_manifest_assets($manifest) : null;
         if (is_array($paths) && ($manifest['schema'] ?? null) === 1 && ($manifest['id'] ?? '') === $id) {
-            foreach ($paths as $path) $declared[$id.'|'.$path] = ['plugin'=>$id, 'path'=>$path];
+            foreach ($paths as $asset) if (($asset['type'] ?? '') === 'css' && extension_asset_matches($asset, $requestPath)) $declared[$id.'|'.$asset['path']] = ['plugin'=>$id, 'path'=>$asset['path']];
         }
-        if (is_array($plugin)) foreach ($plugin['manifest_assets'] ?? [] as $path) $declared[$id.'|'.$path] = ['plugin'=>$id, 'path'=>$path];
     }
     foreach (extension_registry()['assets'] as $asset) {
-        if ($asset['type'] === 'css') $declared[$asset['plugin'].'|'.$asset['path']] = ['plugin'=>$asset['plugin'], 'path'=>$asset['path']];
+        if ($onlyPlugin !== null && $asset['plugin'] !== $onlyPlugin) continue;
+        if ($asset['type'] === 'css' && extension_asset_matches($asset, $requestPath)) $declared[$asset['plugin'].'|'.$asset['path']] = ['plugin'=>$asset['plugin'], 'path'=>$asset['path']];
     }
     foreach ($declared as $asset) {
         $file = extension_secure_runtime_file($root.$asset['plugin'], $asset['path']);
         if ($file === null) continue;
         $version = asset_version($file);
         $html .= '<link rel="stylesheet" href="/plugin-assets/'.rawurlencode($asset['plugin']).'/'.implode('/', array_map('rawurlencode', explode('/', $asset['path']))).'?v='.$version.'">';
+    }
+    return $html;
+}
+
+function extension_javascripts(string $requestPath, ?string $onlyPlugin = null): string
+{
+    $records = extension_enabled_plugins();
+    $root = dirname(__DIR__).'/plugins/';
+    $declared = [];
+    $fallback = false;
+    foreach ($records as $record) {
+        $id = (string)($record['name'] ?? '');
+        if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
+        if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
+        $manifest = extension_plugin_manifest($id);
+        if (!is_array($manifest) || ($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $id) continue;
+        $assets = extension_manifest_assets($manifest);
+        if ($assets === null) { $fallback = true; continue; }
+        foreach ($assets as $asset) {
+            if (($asset['type'] ?? '') === 'js' && extension_asset_matches($asset, $requestPath)) $declared[$id.'|'.$asset['path']] = ['plugin'=>$id, 'path'=>$asset['path']];
+        }
+    }
+    if ($fallback) extension_runtime_load($onlyPlugin);
+    foreach (extension_registry()['assets'] as $asset) {
+        if ($onlyPlugin !== null && $asset['plugin'] !== $onlyPlugin) continue;
+        if ($asset['type'] === 'js' && extension_asset_matches($asset, $requestPath)) $declared[$asset['plugin'].'|'.$asset['path']] = ['plugin'=>$asset['plugin'], 'path'=>$asset['path']];
+    }
+    $html = '';
+    foreach ($declared as $asset) {
+        $file = extension_secure_runtime_file($root.$asset['plugin'], $asset['path']);
+        if ($file === null) continue;
+        $version = asset_version($file);
+        $html .= '<script src="/plugin-assets/'.rawurlencode($asset['plugin']).'/'.implode('/', array_map('rawurlencode', explode('/', $asset['path']))).'?v='.$version.'" defer></script>';
     }
     return $html;
 }

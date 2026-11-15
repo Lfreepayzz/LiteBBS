@@ -26,8 +26,10 @@ function process_outbox_events(int $limit = 100): int
             try {
                 $payload=json_decode((string)$event['payload_json'], true, 32, JSON_THROW_ON_ERROR);
                 if (!is_array($payload)) throw new RuntimeException('Outbox payload must be an object.');
+                extension_validate_async_event_payload((string)$event['event_name'],$payload);
                 $payload['_outbox_event_key']=(string)$event['event_key'];
-                extension_event_or_fail((string)$event['event_name'], $payload);
+                extension_runtime_load(null,'event',(string)$event['event_name']);
+                foreach(extension_registry()['events'][(string)$event['event_name']]??[] as $entry){if(extension_plugin_degraded($entry['plugin']))continue;try{($entry['listener'])($payload);}catch(Throwable $listenerError){extension_plugin_failure($entry['plugin']);throw new RuntimeException('Plugin event '.$entry['plugin'].' failed.',0,$listenerError);}}
                 if (h('UPDATE outbox_events SET processed_at=UTC_TIMESTAMP(6),lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?', [(int)$event['id'], $leaseToken])->rowCount() === 1) $processed++;
             } catch (Throwable $error) {
                 $message = text_slice($error->getMessage(), 0, 500);

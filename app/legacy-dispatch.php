@@ -9,6 +9,7 @@ if($path==='/admin/themes'||$path==='/admin/plugins')$modules[]='admin-extension
 if(in_array($path,['/admin/users','/admin/settings','/admin/content'],true))$modules[]='admin-users-settings.php';
 if($path==='/admin/reports')$modules[]='admin-reports.php';
 if($path==='/avatar/upload'||preg_match('~^/(?:avatar/\d+|topic/\d+/(?:bookmark|subscribe)|post/\d+/like|report|user/\d+/(?:block|unblock))$~',$path))$modules[]='community.php';
+if(preg_match('~^/p/\d+/edit$~',$path))$modules[]='post-edit.php';
 if($method==='GET'&&(preg_match('~^/(?:t/\d+|c/\d+)$~',$path)||str_starts_with($path,'/u/')))$modules[]='read-pages.php';
 if($path==='/admin')$modules[]='admin-dashboard.php';
 if($path==='/admin/audit')$modules[]='admin-audit.php';

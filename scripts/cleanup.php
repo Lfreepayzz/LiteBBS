@@ -30,7 +30,7 @@ if (is_dir($cache)) {
         $relative = str_replace('\\', '/', substr($item->getPathname(), strlen($cache) + 1));
         if ($item->isDir() && $item->getMTime() < $cutoff && preg_match('~^(?:inspect|install)-[a-f0-9]+$~', $relative)) {
             if (@rmdir($item->getPathname())) $removed++;
-        } elseif ($item->isFile() && $item->getMTime() < $cutoff && preg_match('~^(?:[a-f0-9]{64}\.cache(?:\.(?:page\.)?lock|\.[a-f0-9]+\.tmp)?|version-[a-f0-9]{64}\.lock|topic-views/[0-9]+\.cache|(?:inspect|install)-[a-f0-9]+/.+)$~', $relative)) {
+        } elseif ($item->isFile() && $item->getMTime() < $cutoff && preg_match('~^(?:[a-f0-9]{64}(?:\.cache(?:\.lock|\.[a-f0-9]+\.tmp)?|\.page\.lock)|version-[a-f0-9]{64}\.lock|topic-views(?:-processing-[a-f0-9]{64})?/[0-9]+\.cache|(?:inspect|install)-[a-f0-9]+/.+)$~', $relative)) {
             if (@unlink($item->getPathname())) $removed++;
         }
     }
