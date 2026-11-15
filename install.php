@@ -99,7 +99,7 @@ if ($method === 'POST') {
     } catch (Throwable $error) {
         if ($error instanceof PDOException) $installError = database_error_message($error);
         elseif ($error instanceof RuntimeException) $installError = $error->getMessage();
-        else $installError = '安装失败：请确认 private/ 目录对 PHP Web 进程可写；详细原因已写入 PHP 错误日志。';
+        else $installError = '安装失败：请确认 private 目录对 PHP Web 进程可写；详细原因已写入 PHP 错误日志。';
         error_log('install: '.$error);
     }
 }
