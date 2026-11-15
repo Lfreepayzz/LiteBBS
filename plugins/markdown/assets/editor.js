@@ -97,7 +97,7 @@
       preview.textContent = '正在生成预览...';
       const csrf = form.querySelector('input[name="csrf"]')?.value || '';
       try {
-        const response = await fetch('/plugin/markdown/preview', {
+        const response = await fetch('/markdown/preview', {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },

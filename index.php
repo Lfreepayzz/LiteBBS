@@ -138,7 +138,7 @@ $kernel->router->add('GET', '~^/$~', static function (\LiteBBS\Framework\Request
 });
 // Load only the extension that owns the requested public route. Plugin
 // management is dispatched inside the shared /admin/plugins controller.
-if (preg_match('~^/plugin/([a-z][a-z0-9_-]{1,31})(?:/|$)~', $path, $pluginRouteMatch)) extension_runtime_register_routes($kernel->router, $pluginRouteMatch[1]);
+if (($publicPlugin = extension_public_route_plugin($path)) !== null) extension_runtime_register_routes($kernel->router, $publicPlugin);
 $dispatchStartedAt = microtime(true);
 $frameworkResponse = $kernel->handle($request, static function (\LiteBBS\Framework\Request $request): ?\LiteBBS\Framework\Response {
     return dispatch_application_route($request, new \LiteBBS\Framework\Container());

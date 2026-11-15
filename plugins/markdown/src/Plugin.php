@@ -7,7 +7,7 @@ final class MarkdownPlugin implements LiteBBSPlugin
     {
         $context->assets()->css('assets/editor.css', ['topic.create','topic.view','post.edit']);
         $context->assets()->js('assets/editor.js', ['topic.create','topic.view','post.edit']);
-        $context->routes()->add('POST', '~^/plugin/markdown/preview$~', static function (\LiteBBS\Framework\Request $request): \LiteBBS\Framework\Response {
+        $context->routes()->front('POST', '~^/markdown/preview$~', static function (\LiteBBS\Framework\Request $request): \LiteBBS\Framework\Response {
             $source = (string)($request->post['body'] ?? '');
             if (text_length($source) > 12000) return new \LiteBBS\Framework\Response('预览内容不能超过 12000 个字符。', 422);
             return (new \LiteBBS\Framework\Response(markdown_plugin_render($source)))

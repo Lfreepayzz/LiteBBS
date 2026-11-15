@@ -47,8 +47,13 @@ final class PluginRouteRegistrar
 
     public function add(string|array $methods, string $pattern, callable $handler, array $options = []): void
     {
+        throw new LogicException('Plugin routes must use routes()->front() with a declared public_route_prefix.');
+    }
+
+    public function front(string|array $methods, string $pattern, callable $handler, array $options = []): void
+    {
         $methods = array_map('strtoupper', (array)$methods);
-        extension_validate_plugin_route($this->id, $methods, $pattern);
+        extension_validate_public_plugin_route($this->id, $methods, $pattern);
         $options = extension_route_options($methods, $options);
         $this->registry['routes'][] = ['plugin'=>$this->id, 'methods'=>$methods, 'pattern'=>$pattern, 'handler'=>$handler, 'options'=>$options];
     }
@@ -353,12 +358,38 @@ function extension_candidate_plugins(string $kind, ?string $hook): array
     return array_merge($index['fallback'], $index['hooks'][$hook] ?? []);
 }
 
-function extension_validate_plugin_route(string $id, array $methods, string $pattern): void
+function extension_validate_public_plugin_route(string $id, array $methods, string $pattern): void
 {
     if (!$methods || array_diff($methods, ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS']) || count($methods) !== count(array_unique($methods))) throw new InvalidArgumentException('Invalid plugin route methods.');
     if (str_contains($pattern, "\0") || preg_match('/[\r\n]/', $pattern) || !preg_match('~^(.)(.*)\\1([a-z]*)$~sD', $pattern, $match)) throw new InvalidArgumentException('Invalid plugin route pattern.');
+    $manifest = extension_plugin_manifest($id);
+    $prefix = is_array($manifest) ? extension_manifest_public_route_prefix($manifest) : null;
+    if ($prefix === null) throw new InvalidArgumentException('Plugin must declare a public_route_prefix before registering front-end routes.');
     $body = $match[2];
-    if (!preg_match('~^\^/plugin/'.preg_quote($id, '~').'(?:/|\$)~', $body) || !str_ends_with($body, '$') || str_contains($body, '|') || @preg_match($pattern, '') === false) throw new InvalidArgumentException('Plugin routes must be exact routes within their namespace.');
+    if (!preg_match('~^\^/'.preg_quote($prefix, '~').'(?:/|\$)~', $body) || !str_ends_with($body, '$') || str_contains($body, '|') || @preg_match($pattern, '') === false) throw new InvalidArgumentException('Plugin routes must be exact routes within their declared public prefix.');
+}
+
+function extension_public_route_plugin(string $path): ?string
+{
+    if (!preg_match('~^/([a-z][a-z0-9-]{1,63})(?:/|$)~', $path, $match)) return null;
+    $prefix = $match[1];
+    $owner = null;
+    foreach (extension_enabled_plugins() as $record) {
+        $id = (string)($record['name'] ?? '');
+        if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
+        try {
+            $manifest = extension_plugin_manifest($id);
+            if (!is_array($manifest) || extension_manifest_public_route_prefix($manifest) !== $prefix) continue;
+            if ($owner !== null) {
+                error_log('duplicate public plugin route prefix: '.$prefix);
+                return null;
+            }
+            $owner = $id;
+        } catch (Throwable $error) {
+            error_log('extension manifest '.$id.' failed: '.$error->getMessage());
+        }
+    }
+    return $owner;
 }
 
 function extension_route_options(array $methods, array $options): array
@@ -411,6 +442,7 @@ function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = 
             extension_manifest_hooks($manifest, 'filter');
             extension_manifest_assets($manifest);
             extension_manifest_admin_path($manifest, $id);
+            extension_manifest_public_route_prefix($manifest);
             extension_manifest_relationships($manifest);
             require_once $entryFile;
             $plugin = new $class();

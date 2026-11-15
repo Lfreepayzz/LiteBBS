@@ -1,0 +1,378 @@
+.friend-links-sidebar {
+  display: grid;
+  min-width: 0;
+  gap: .65rem;
+  padding: 16px;
+  border: 1px solid var(--line, rgba(127, 127, 127, .22));
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 24px rgba(31, 42, 68, .045);
+  overflow-wrap: anywhere;
+}
+
+.friend-links-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.friend-links-heading h2 {
+  font-size: .84rem;
+}
+
+.friend-links-heading a {
+  padding: .1rem .25rem;
+  border: 0;
+  border-radius: 0;
+  color: var(--accent, #315efb);
+  font-size: .68rem;
+  font-weight: 700;
+}
+
+.friend-links-heading h2,
+.friend-links-application h1,
+.friend-links-admin h2 {
+  margin: 0;
+}
+
+.friend-links-list a,
+.friend-links-admin a {
+  color: inherit;
+}
+
+.friend-links-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 .45rem;
+  margin: 0;
+}
+
+.friend-links-list a {
+  display: grid;
+  align-items: center;
+  min-width: 0;
+  min-height: 28px;
+  padding: .18rem 0;
+  border-radius: 0;
+  color: var(--muted, #667085);
+  text-decoration: none;
+  transition: color .15s ease;
+}
+
+.friend-links-list a:nth-child(n + 3) {
+  border-top: 1px solid var(--line, #e4e8f0);
+}
+
+.friend-links-list a:hover {
+  color: var(--accent, #315efb);
+}
+
+.friend-links-item {
+  display: grid;
+  min-width: 0;
+  gap: .08rem;
+}
+
+.friend-links-list strong {
+  overflow: hidden;
+  font-size: .76rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-links-list small,
+.friend-links-help,
+.friend-links-meta {
+  color: #68707a;
+  font-size: .82rem;
+  line-height: 1.45;
+}
+
+.friend-links-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .66rem;
+}
+
+@media (min-width: 961px) {
+  .right-sidebar:has(.friend-links-sidebar) {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+.friend-links-application,
+.friend-links-admin {
+  max-width: 760px;
+}
+
+.friend-links-application {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.friend-links-application-header {
+  padding-bottom: 1.2rem;
+  border-bottom: 1px solid var(--line, #e4e8f0);
+}
+
+.friend-links-eyebrow {
+  display: block;
+  margin-bottom: .55rem;
+  color: var(--accent, #315efb);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.friend-links-application-header h1 {
+  margin: 0;
+}
+
+.friend-links-application-header p {
+  max-width: 620px;
+  margin: .65rem 0 0;
+  color: var(--muted, #667085);
+  line-height: 1.7;
+}
+
+.friend-links-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.friend-links-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .6rem;
+  padding: .85rem;
+  border: 1px solid var(--line, #e4e8f0);
+  border-radius: .6rem;
+  background: var(--soft, #f8f9fc);
+}
+
+.friend-links-steps span {
+  color: var(--accent, #315efb);
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.friend-links-steps strong,
+.friend-links-steps small {
+  display: block;
+}
+
+.friend-links-steps strong {
+  font-size: .82rem;
+}
+
+.friend-links-steps small,
+.friend-links-form label small {
+  margin-top: .1rem;
+  color: var(--muted, #667085);
+  font-size: .77rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.friend-links-form {
+  max-width: none;
+  margin: 0;
+  padding: 1.2rem;
+  border: 1px solid var(--line, #e4e8f0);
+  border-radius: .7rem;
+  background: var(--soft, #f8f9fc);
+}
+
+.friend-links-form h2 {
+  margin: 0 0 .25rem;
+  font-size: 1rem;
+}
+
+.friend-links-form em {
+  color: var(--muted, #667085);
+  font-size: .78rem;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.friend-links-submit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: .35rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line, #e4e8f0);
+}
+
+.friend-links-submit span {
+  color: var(--muted, #667085);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.friend-links-application form,
+.friend-links-admin form {
+  display: grid;
+  gap: .85rem;
+}
+
+.friend-links-application label,
+.friend-links-admin label {
+  display: grid;
+  gap: .35rem;
+  font-weight: 600;
+}
+
+.friend-links-application input,
+.friend-links-application textarea,
+.friend-links-admin input,
+.friend-links-admin textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.friend-links-message {
+  padding: .8rem 1rem;
+  border-radius: .5rem;
+  background: #e9f7ef;
+  color: #17633d;
+}
+
+.friend-links-admin-list {
+  display: grid;
+  gap: .75rem;
+  margin-top: 1.25rem;
+}
+
+.friend-links-admin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem;
+  border: 1px solid #d8dde3;
+  border-radius: .55rem;
+}
+
+.friend-links-admin-row h3 {
+  margin: 0 0 .25rem;
+  font-size: 1rem;
+}
+
+.friend-links-admin-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 96px;
+  gap: .38rem;
+}
+
+.friend-links-admin-actions form {
+  display: block;
+}
+
+.friend-links-admin-actions button {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 .65rem;
+  border: 1px solid #cfd7df;
+  border-radius: .38rem;
+  background: #fff;
+  color: #40505d;
+  cursor: pointer;
+  font-size: .74rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.friend-links-admin-actions button:hover {
+  border-color: #91a4b6;
+  background: #f4f7f9;
+}
+
+.friend-links-admin-actions .friend-links-action-approve {
+  border-color: #1f4f78;
+  background: #1f4f78;
+  color: #fff;
+}
+
+.friend-links-admin-actions .friend-links-action-approve:hover {
+  border-color: #173d5d;
+  background: #173d5d;
+}
+
+.friend-links-admin-actions .friend-links-action-delete {
+  border-color: #e4c2bd;
+  color: #9a3f34;
+}
+
+.friend-links-admin-actions .friend-links-action-delete:hover {
+  border-color: #cd897e;
+  background: #fff3f1;
+  color: #812f26;
+}
+
+.friend-links-status {
+  display: inline-block;
+  margin-left: .45rem;
+  padding: .12rem .42rem;
+  border-radius: .35rem;
+  background: #e9f7ef;
+  color: #17633d;
+  font-size: .75rem;
+}
+
+.friend-links-status.is-disabled {
+  background: #f5ecec;
+  color: #8c3030;
+}
+
+@media (max-width: 640px) {
+  .friend-links-list {
+    grid-template-columns: 1fr;
+  }
+
+  .friend-links-list a:nth-child(n + 3) {
+    border-top: 0;
+  }
+
+  .friend-links-list a + a {
+    border-top: 1px solid var(--line, #e4e8f0);
+  }
+
+  .friend-links-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .friend-links-submit {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .friend-links-submit .primary {
+    width: 100%;
+  }
+
+  .friend-links-admin-row {
+    grid-template-columns: 1fr;
+  }
+
+  .friend-links-admin-actions {
+    flex-direction: row;
+    min-width: 0;
+  }
+
+  .friend-links-admin-actions form {
+    flex: 1 1 0;
+  }
+}

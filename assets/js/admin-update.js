@@ -10,6 +10,23 @@
 
     if (!checkButton || !status || !progress || !filePanel) return;
 
+    function matchStatusToCheckButton() {
+        var style = window.getComputedStyle(checkButton);
+        var properties = [
+            'backgroundColor', 'backgroundImage', 'border', 'borderRadius',
+            'boxShadow', 'color', 'fontFamily', 'fontSize', 'fontWeight',
+            'lineHeight', 'minHeight', 'padding'
+        ];
+
+        properties.forEach(function (property) {
+            status.style[property] = style[property];
+        });
+
+        status.style.width = status.textContent === '尚未检查。' ? checkButton.offsetWidth + 'px' : 'auto';
+    }
+
+    matchStatusToCheckButton();
+
     function csrfToken() {
         var input = document.querySelector('#program-update input[name="csrf"], #program-update-csrf');
         return input ? input.value : '';
@@ -39,6 +56,7 @@
 
     function showError(error) {
         status.textContent = error && error.message ? error.message : '更新操作失败。';
+        matchStatusToCheckButton();
         progress.value = 0;
     }
 
@@ -63,6 +81,7 @@
         setBusy(checkButton, true);
         setProgress(15);
         status.textContent = '正在读取 GitHub 文件清单...';
+        matchStatusToCheckButton();
 
         fetch('/admin/extensions?action=check', {
             method: 'GET',
@@ -82,10 +101,12 @@
                 setProgress(35);
                 if (!Array.isArray(data.files) || data.files.length === 0) {
                     status.textContent = '当前已是最新版本（' + String(data.version || '').slice(0, 12) + '）。';
+                    matchStatusToCheckButton();
                     filePanel.innerHTML = '';
                     return;
                 }
                 status.textContent = '发现 ' + data.files.length + ' 个更新文件，版本 ' + String(data.version || '').slice(0, 12) + '。';
+                matchStatusToCheckButton();
                 renderUpdateFiles(data);
                 setProgress(45);
             })
@@ -105,6 +126,7 @@
             setBusy(button, true);
             setProgress(60);
             status.textContent = '正在下载 GitHub 更新包，请不要关闭页面...';
+            matchStatusToCheckButton();
             return;
         }
 
@@ -113,6 +135,7 @@
             progress.hidden = false;
             progress.removeAttribute('value');
             status.textContent = '正在覆盖文件，请不要关闭页面...';
+            matchStatusToCheckButton();
         }
     });
     }

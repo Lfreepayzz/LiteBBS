@@ -12,6 +12,7 @@
     "slots": ["topic.create.fields", "reply.create.fields", "post.edit.fields"],
     "renderers": ["post.markdown"]
   },
+  "public_route_prefix": "markdown",
   "assets": [
     {"path": "assets/editor.css", "pages": ["topic.create", "topic.view", "post.edit"]},
     {"path": "assets/editor.js", "pages": ["topic.create", "topic.view", "post.edit"]}

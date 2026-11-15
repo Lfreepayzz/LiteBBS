@@ -44,13 +44,15 @@
       </section>
       <section class="sidebar-card">
         <div class="sidebar-heading"><h2>讨论分区</h2><a href="/">全部</a></div>
-        <nav class="category-list" aria-label="讨论分区"><?= $left ?><?= extension_slot('sidebar.sections', ['path'=>$requestPath, 'user'=>$user]) ?></nav>
+        <nav class="category-list" aria-label="讨论分区"><?= $left ?></nav>
       </section>
       <section class="sidebar-card rules-card">
         <h2>社区公约</h2>
         <p><span>01</span>友善交流，尊重不同观点</p><p><span>02</span>发布清晰且有价值的内容</p><p><span>03</span>拒绝广告与重复灌水</p>
         <a href="/robots.txt">查看社区规则 <span aria-hidden="true">→</span></a>
       </section>
+      <?php // Front-end plugin sidebar blocks render as independent bottom sections. ?>
+      <?= extension_slot('sidebar.sections', ['path'=>$requestPath, 'user'=>$user]) ?>
     </aside>
   </div>
   <?= extension_slot('footer.before', ['path'=>$requestPath, 'user'=>$user]) ?>

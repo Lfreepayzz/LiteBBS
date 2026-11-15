@@ -13,6 +13,7 @@
     "preloads": ["post.after-body"],
     "events": ["topic.create.preflight", "topic.created", "post.created", "post.updated"]
   },
+  "public_route_prefix": "attachments",
   "assets": ["assets/style.css"],
   "database_tables": [
     "plg_zip_remote_attachments_files",

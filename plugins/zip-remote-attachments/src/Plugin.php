@@ -14,12 +14,12 @@ final class ZipRemoteAttachmentsPlugin implements LiteBBSPlugin
         $context->events()->listen('post.updated', static function (array $event): void { zip_attachment_update($event); });
         $context->preloads()->add('post.after-body', static function (array $view): void { zip_attachment_preload($view); });
         $context->slots()->add('post.after-body', static function (array $view): string { return zip_attachment_render($view); }, 20);
-        $context->routes()->add('GET', '~^/plugin/zip-remote-attachments/download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response { return zip_attachment_download((int)$params['id']); });
-        $context->routes()->add('POST', '~^/plugin/zip-remote-attachments/unlock/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
+        $context->routes()->front('GET', '~^/attachments/download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response { return zip_attachment_download((int)$params['id']); });
+        $context->routes()->front('POST', '~^/attachments/unlock/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
             require_post();
             return zip_attachment_unlock((int)$params['id']);
         });
-        $context->routes()->add('POST', '~^/plugin/zip-remote-attachments/external-download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
+        $context->routes()->front('POST', '~^/attachments/external-download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
             require_post();
             return zip_attachment_external_download((int)$params['id']);
         });
@@ -167,9 +167,9 @@ function zip_attachment_render(array $view): string
         $allowed = $viewer && (($viewer['role'] ?? '') === 'admin' || (int)$viewer['id'] === (int)$file['user_id'] || $file['access_mode'] === 'login' || $grant);
         $label = $file['access_mode'] === 'reply' ? '回复后下载' : ($file['access_mode'] === 'points' ? $file['point_cost'].' 积分购买' : '登录后下载');
         $html .= '<article><div><strong>'.e($file['original_name']).'</strong><small>'.e($label).'</small></div>';
-        if ($allowed) $html .= '<a class="attachment-download" href="/plugin/zip-remote-attachments/download/'.(int)$file['id'].'">下载附件</a>';
+        if ($allowed) $html .= '<a class="attachment-download" href="/attachments/download/'.(int)$file['id'].'">下载附件</a>';
         elseif (!$viewer) $html .= '<a class="attachment-download" href="/login">登录后下载</a>';
-        else $html .= '<form method="post" action="/plugin/zip-remote-attachments/unlock/'.(int)$file['id'].'"><input type="hidden" name="csrf" value="'.e(csrf()).'"><button class="attachment-download">'.e($file['access_mode'] === 'points' ? '购买下载' : $label).'</button></form>';
+        else $html .= '<form method="post" action="/attachments/unlock/'.(int)$file['id'].'"><input type="hidden" name="csrf" value="'.e(csrf()).'"><button class="attachment-download">'.e($file['access_mode'] === 'points' ? '购买下载' : $label).'</button></form>';
         $html .= '</article>';
     }
     return $html.'</section>';
@@ -182,7 +182,7 @@ function zip_attachment_download(int $id): \LiteBBS\Framework\Response
     $file = zip_attachment_available_to($id, $viewer);
     if ($file['source_kind'] === 'remote') {
         $host = (string)(parse_url((string)$file['remote_url'], PHP_URL_HOST) ?: '');
-        $body = '<section class="plugin-attachments"><h1>即将离开本站</h1><p>该附件托管在外部网站 <strong>'.e($host).'</strong>。请确认该来源可信后继续下载。</p><form method="post" action="/plugin/zip-remote-attachments/external-download/'.$id.'"><input type="hidden" name="csrf" value="'.e(csrf()).'"><button class="attachment-download">继续前往外部下载</button></form></section>';
+        $body = '<section class="plugin-attachments"><h1>即将离开本站</h1><p>该附件托管在外部网站 <strong>'.e($host).'</strong>。请确认该来源可信后继续下载。</p><form method="post" action="/attachments/external-download/'.$id.'"><input type="hidden" name="csrf" value="'.e(csrf()).'"><button class="attachment-download">继续前往外部下载</button></form></section>';
         return new \LiteBBS\Framework\Response($body);
     }
     $path = dirname(__DIR__, 3).'/uploads/plugin-zip/'.basename((string)$file['storage_name']);
@@ -276,5 +276,5 @@ function zip_attachment_unlock(int $id): \LiteBBS\Framework\Response
             $db->commit();
         } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
     }
-    redirect('/plugin/zip-remote-attachments/download/'.$id);
+    redirect('/attachments/download/'.$id);
 }
