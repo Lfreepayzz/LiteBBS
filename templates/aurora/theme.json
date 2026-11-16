@@ -1,8 +1,0 @@
-{
-  "name": "aurora",
-  "version": "1.0.0",
-  "requires": ">=1.0 <2.0",
-  "entry": "layout.php",
-  "title": "Aurora 简洁主题",
-  "author": "LiteBBS"
-}
