@@ -1,0 +1,57 @@
+# LiteBBS - Baota/BT Panel Nginx pseudo-static rules
+# Paste only this file into: Website -> Settings -> Rewrite.
+# The site root must be the directory containing index.php and install.php.
+
+# Keep the real installer URL independent from pseudo-static routing.
+location = /install {
+    return 307 /install.php$is_args$args;
+}
+
+# Only these framework assets may be served from /assets.
+location ~ ^/assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ {
+    try_files $uri =404;
+}
+
+# Themes may expose only flat files from their assets directory. The ^~ parent
+# prevents Baota's generic PHP handler from executing theme PHP files.
+location ^~ /templates/ {
+    location ~ ^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ {
+        try_files $uri =404;
+    }
+    location ~ ^/templates/ {
+        return 404;
+    }
+}
+
+# Prefix locations take priority over Baota's generated PHP regex location.
+location ^~ /app/ { return 404; }
+location ^~ /languages/ { return 404; }
+location ^~ /database/ { return 404; }
+location ^~ /cache/ { return 404; }
+location ^~ /logs/ { return 404; }
+location ^~ /uploads/ { return 404; }
+location ^~ /plugins/ { return 404; }
+location ^~ /private/ { return 404; }
+location ^~ /scripts/ { return 404; }
+location ^~ /market-packages/ { return 404; }
+location ^~ /config.php { return 404; }
+
+location ~ ^/(?:config\.php.*|install\.lock|composer\.(?:json|lock)|.*\.(?:sql|tmp|md|ps1|sh|ini|bak|old|orig|swp|example|conf|zip|tar|gz|tgz|rar|7z))$ {
+    return 404;
+}
+location ~ (^|/)\. {
+    return 404;
+}
+
+# Baota's generated PHP include handles the two existing PHP entry files. A
+# server rewrite-phase return is independent of PHP location include order.
+if ($uri ~ ^/(?!index\.php$|install\.php$).+\.php(?:/|$)) {
+    return 404;
+}
+
+# All application routes, including /plugin and /plugin-assets, enter the fixed
+# front controller. Plugin source files under /plugins remain blocked above.
+# Do not use index.php/$request_uri: PHP-FPM may return "No input file specified".
+location / {
+    try_files /__litebbs_no_static_files__ /index.php?$query_string;
+}

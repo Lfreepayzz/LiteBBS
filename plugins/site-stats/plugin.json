@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "site-stats",
+  "title": "\u7ad9\u70b9\u7edf\u8ba1",
+  "description": "\u5728\u524d\u53f0\u4fa7\u8fb9\u680f\u5c55\u793a\u4e3b\u9898\u3001\u56de\u590d\u3001\u7528\u6237\u603b\u6570\u548c\u6700\u65b0\u6ce8\u518c\u7528\u6237\u3002",
+  "version": "1.0.0",
+  "requires": { "core": ">=1.0 <2.0" },
+  "entry": "src/Plugin.php",
+  "class": "SiteStatsPlugin",
+  "permissions": ["database", "assets"],
+  "hooks": {
+    "slots": ["sidebar.sections"]
+  },
+  "assets": ["assets/style.css"],
+  "database_tables": []
+}

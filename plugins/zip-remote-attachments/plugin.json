@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "zip-remote-attachments",
+  "title": "压缩包与远程附件",
+  "description": "支持上传压缩包和远程附件，并提供受控访问。",
+  "version": "2.2.0",
+  "requires": { "core": ">=1.0 <2.0" },
+  "entry": "src/Plugin.php",
+  "class": "ZipRemoteAttachmentsPlugin",
+  "permissions": ["database", "storage", "routes", "views", "assets"],
+  "hooks": {
+    "slots": ["topic.create.fields", "post.edit.fields", "post.after-body"],
+    "preloads": ["post.after-body"],
+    "events": ["topic.create.preflight", "topic.created", "post.created", "post.updated"]
+  },
+  "public_route_prefix": "attachments",
+  "assets": ["assets/style.css"],
+  "database_tables": [
+    "plg_zip_remote_attachments_files",
+    "plg_zip_remote_attachments_grants"
+  ]
+}
