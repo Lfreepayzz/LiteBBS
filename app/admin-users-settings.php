@@ -6,15 +6,19 @@ if (!in_array($path, ['/admin/users', '/admin/settings', '/admin/content'], true
 if ($path === '/admin/content') {
     $contentAdmin = admin();
     if ($method !== 'POST') {
-        $body = '';
-        foreach (h('SELECT id,title,is_pinned,is_locked FROM topics WHERE status="normal" ORDER BY id DESC LIMIT 100')->fetchAll() as $topic) {
+        $topics = h('SELECT id,title,is_pinned,is_locked FROM topics WHERE status="normal" ORDER BY id DESC LIMIT 100')->fetchAll();
+        $body = '<section class="management-hero"><div><p class="eyebrow">CONTENT CONTROL</p><h2>内容管理</h2><p>集中处理最近发布的主题，快速调整展示状态与讨论权限。</p></div><span class="management-count"><strong>'.count($topics).'</strong> 条主题</span></section><section class="management-list content-management-list">';
+        if (!$topics) $body .= '<p class="admin-empty">目前没有可管理的公开主题。</p>';
+        foreach ($topics as $topic) {
             $id = (int)$topic['id'];
-            $body .= '<article class="adminrow"><a href="/t/'.$id.'">'.e($topic['title']).'</a><div class="dashboard-actions">';
+            $state = ($topic['is_pinned'] ? '<span class="management-badge pinned">置顶</span>' : '').($topic['is_locked'] ? '<span class="management-badge locked">已锁定</span>' : '<span class="management-badge normal">可回复</span>');
+            $body .= '<article class="management-row content-row"><div class="management-main"><div class="management-kicker"><span>主题 #'.$id.'</span>'.$state.'</div><a class="management-title" href="/t/'.$id.'">'.e($topic['title']).'</a></div><div class="management-actions">';
             foreach ([['pin', $topic['is_pinned'] ? 0 : 1, $topic['is_pinned'] ? '取消置顶' : '置顶'], ['lock', $topic['is_locked'] ? 0 : 1, $topic['is_locked'] ? '解锁' : '锁定']] as [$action, $value, $label]) {
-                $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="action" value="'.$action.'"><input type="hidden" name="value" value="'.$value.'"><button>'.e($label).'</button></form>';
+                $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="action" value="'.$action.'"><input type="hidden" name="value" value="'.$value.'"><button class="action-button">'.e($label).'</button></form>';
             }
-            $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="action" value="delete"><button>永久删除</button></form></div></article>';
+            $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="action" value="delete"><button class="action-button danger">永久删除</button></form></div></article>';
         }
+        $body .= '</section>';
         page('内容管理', $body);
         return;
     }
@@ -99,12 +103,15 @@ if ($method === 'POST') {
 }
 
 if ($path === '/admin/users') {
-    $body = '';
-    foreach (h('SELECT id,username,email,role,status,is_developer,points FROM users ORDER BY id DESC LIMIT 100')->fetchAll() as $row) {
-        $body .= '<form class="adminrow" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'">'.e($row['username']).' · '.e($row['email']).' · '.(int)$row['points'].'<select name="role">';
+    $users = h('SELECT id,username,email,role,status,is_developer,points FROM users ORDER BY id DESC LIMIT 100')->fetchAll();
+    $body = '<section class="management-hero"><div><p class="eyebrow">MEMBER ACCESS</p><h2>用户管理</h2><p>维护成员角色、账户状态与开发者权限。保存后会撤销该用户的现有会话。</p></div><span class="management-count"><strong>'.count($users).'</strong> 位用户</span></section><section class="management-list user-management-list">';
+    if (!$users) $body .= '<p class="admin-empty">目前还没有注册用户。</p>';
+    foreach ($users as $row) {
+        $body .= '<form class="management-row user-row" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.(int)$row['id'].'"><div class="management-main"><div class="user-avatar">'.e(strtoupper(substr((string)$row['username'], 0, 1))).'</div><div><a class="management-title" href="/u/'.rawurlencode((string)$row['username']).'">'.e($row['username']).'</a><p class="management-meta">'.e($row['email']).' <span>·</span> '.(int)$row['points'].' 积分 <span>·</span> ID '.(int)$row['id'].'</p></div></div><div class="user-controls"><label>角色<select name="role">';
         foreach (['member' => '成员', 'moderator' => '版主', 'admin' => '管理员'] as $role => $label) $body .= '<option value="'.$role.'"'.($row['role'] === $role ? ' selected' : '').'>'.$label.'</option>';
-        $body .= '</select><select name="status"><option value="active"'.($row['status'] === 'active' ? ' selected' : '').'>正常</option><option value="disabled"'.($row['status'] !== 'active' ? ' selected' : '').'>停用</option></select><label><input type="checkbox" name="is_developer" value="1"'.((int)$row['is_developer'] === 1 ? ' checked' : '').'>开发者权限</label><button>保存并撤销会话</button></form>';
+        $body .= '</select></label><label>状态<select name="status"><option value="active"'.($row['status'] === 'active' ? ' selected' : '').'>正常</option><option value="disabled"'.($row['status'] !== 'active' ? ' selected' : '').'>停用</option></select></label><label class="developer-toggle"><input type="checkbox" name="is_developer" value="1"'.((int)$row['is_developer'] === 1 ? ' checked' : '').'><span>开发者</span></label><button class="action-button primary-action">保存</button></div></form>';
     }
+    $body .= '</section>';
     page('用户管理', $body);
     return;
 }

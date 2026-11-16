@@ -1,4 +1,8 @@
 (() => {
+  const maxBodyLength = 12000;
+
+  const characterLength = (value) => Array.from(value).length;
+
   const insert = (textarea, before, after, placeholder) => {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
@@ -85,10 +89,30 @@
     const preview = document.createElement('div');
     preview.className = 'markdown-editor-preview';
     preview.setAttribute('aria-live', 'polite');
+    const lengthStatus = document.createElement('div');
+    lengthStatus.className = 'markdown-editor-length';
+    lengthStatus.setAttribute('aria-live', 'polite');
     let previewRequest = null;
     let previewTimer = null;
     let previewRevision = 0;
+    const updateLength = () => {
+      const length = characterLength(textarea.value);
+      const remaining = maxBodyLength - length;
+      const invalid = remaining < 0;
+      textarea.setCustomValidity(invalid ? `正文不能超过 ${maxBodyLength.toLocaleString()} 个字符。` : '');
+      lengthStatus.textContent = invalid
+        ? `已超出 ${Math.abs(remaining).toLocaleString()} 个字符`
+        : `${length.toLocaleString()} / ${maxBodyLength.toLocaleString()} 个字符`;
+      lengthStatus.classList.toggle('is-invalid', invalid);
+      return !invalid;
+    };
     const refresh = async () => {
+      if (!updateLength()) {
+        preview.classList.remove('is-loading');
+        preview.classList.add('has-error');
+        preview.textContent = `正文不能超过 ${maxBodyLength.toLocaleString()} 个字符。`;
+        return;
+      }
       const revision = ++previewRevision;
       previewRequest?.abort();
       previewRequest = new AbortController();
@@ -148,9 +172,10 @@
     const help = document.createElement('div');
     help.className = 'markdown-editor-help';
     help.textContent = '支持 Markdown：Ctrl+B 粗体，Ctrl+I 斜体，Ctrl+K 链接。';
-    editor.append(toolbar, help, preview);
+    editor.append(toolbar, help, lengthStatus, preview);
     mount.replaceWith(editor);
     textarea.addEventListener('input', () => {
+      updateLength();
       if (!preview.classList.contains('is-visible')) return;
       clearTimeout(previewTimer);
       previewTimer = setTimeout(refresh, 250);
@@ -161,6 +186,12 @@
       if (event.key.toLowerCase() === 'i') { event.preventDefault(); insert(textarea, '*', '*', '斜体文本'); }
       if (event.key.toLowerCase() === 'k') { event.preventDefault(); insert(textarea, '[', '](https://example.com)', '链接文字'); }
     });
+    form.addEventListener('submit', (event) => {
+      if (updateLength()) return;
+      event.preventDefault();
+      textarea.reportValidity();
+    });
+    updateLength();
   };
 
   document.addEventListener('DOMContentLoaded', () => {

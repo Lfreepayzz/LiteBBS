@@ -44,6 +44,15 @@
   font-size: .78rem;
 }
 
+.markdown-editor-length {
+  padding: 0 .6rem .45rem;
+  color: #587064;
+  font-size: .78rem;
+  text-align: right;
+}
+
+.markdown-editor-length.is-invalid { color: #8a2d24; font-weight: 700; }
+
 .markdown-editor-preview {
   display: none;
   min-height: 7rem;

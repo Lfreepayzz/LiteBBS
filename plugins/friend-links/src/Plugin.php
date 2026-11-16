@@ -106,20 +106,22 @@ function friend_links_admin_page(Request $request): array
     }
 
     $links = h('SELECT id,title,url,description,source_url,status,verified_at,last_checked_at,created_at FROM plg_friend_links_links ORDER BY created_at DESC,id DESC')->fetchAll();
-    $body = '<section class="friend-links-admin"><p class="admin-intro">申请会保留对方填写的本站链接所在页。请打开该页面确认已存在本站 HTTPS 链接，再点击“确认并启用”。这里也可以手工新增、停用或删除友情链接。</p><h2>新增友情链接</h2><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="add"><label>网站名称<input name="title" maxlength="100" required></label><label>网站地址<input type="url" name="url" maxlength="2048" placeholder="https://example.com/" required></label><label>网站简介（可选）<textarea name="description" maxlength="255" rows="3"></textarea></label><button class="primary" type="submit">新增友情链接</button></form><div class="friend-links-admin-list">';
+    $counts = ['pending' => 0, 'active' => 0, 'disabled' => 0];
+    foreach ($links as $link) $counts[(string)$link['status']]++;
+    $body = '<section class="friend-links-admin"><header class="friend-links-admin-hero"><div><p class="friend-links-eyebrow">PARTNER DIRECTORY</p><h2>友情链接管理</h2><p>审核站点互链申请，维护已展示的合作伙伴链接。确认前请打开对方提供的验证页面，核验本站 HTTPS 链接。</p></div><div class="friend-links-admin-stats"><span><strong>'.(int)$counts['pending'].'</strong> 待核验</span><span><strong>'.(int)$counts['active'].'</strong> 已启用</span><span><strong>'.(int)$counts['disabled'].'</strong> 已停用</span></div></header><section class="friend-links-admin-create"><div class="friend-links-admin-section-heading"><span>+</span><div><h3>手工新增</h3><p>直接添加一个已确认的友情链接，保存后会立即在侧边栏展示。</p></div></div><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="add"><label>网站名称<input name="title" maxlength="100" placeholder="例如：示例社区" required></label><label>网站地址<input type="url" name="url" maxlength="2048" placeholder="https://example.com/" required></label><label class="friend-links-admin-description">网站简介 <em>可选</em><textarea name="description" maxlength="255" rows="3" placeholder="用一句话说明网站内容与定位。"></textarea></label><div class="friend-links-admin-create-footer"><span>新增链接默认启用，并记录为已核验。</span><button class="primary" type="submit">新增并启用</button></div></form></section><section class="friend-links-admin-directory"><div class="friend-links-admin-directory-heading"><div><h3>链接目录</h3><p>'.count($links).' 条记录</p></div></div><div class="friend-links-admin-list">';
     if (!$links) $body .= '<p class="friend-links-help">尚未添加友情链接。</p>';
     foreach ($links as $link) {
         $status = (string)$link['status'];
         $active = $status === 'active';
         $pending = $status === 'pending';
         $statusLabel = $active ? '已启用' : ($pending ? '待核验' : '已停用');
-        $body .= '<article class="friend-links-admin-row"><div><h3>'.e($link['title']).'<span class="friend-links-status'.($active ? '' : ' is-disabled').'">'.$statusLabel.'</span></h3><p><a href="'.e($link['url']).'" target="_blank" rel="noopener noreferrer">'.e($link['url']).'</a></p>';
+        $body .= '<article class="friend-links-admin-row is-'.e($status).'"><div class="friend-links-admin-row-main"><div class="friend-links-admin-row-title"><h3>'.e($link['title']).'</h3><span class="friend-links-status'.($active ? '' : ($pending ? ' is-pending' : ' is-disabled')).'">'.$statusLabel.'</span></div><p class="friend-links-admin-url"><a href="'.e($link['url']).'" target="_blank" rel="noopener noreferrer">'.e($link['url']).'</a></p>';
         if ((string)$link['description'] !== '') $body .= '<p>'.e($link['description']).'</p>';
         if ((string)($link['source_url'] ?? '') !== '') $body .= '<p class="friend-links-meta">互链验证页：<a href="'.e($link['source_url']).'" target="_blank" rel="noopener noreferrer">'.e($link['source_url']).'</a></p>';
         if ((string)($link['verified_at'] ?? '') !== '') $body .= '<p class="friend-links-meta">最近验证：'.e((string)$link['last_checked_at']).'</p>';
         $body .= '</div><div class="friend-links-admin-actions">'.($pending ? '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="approve"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="primary friend-links-action-approve" type="submit">确认并启用</button></form>' : '').'<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="friend-links-action-toggle" type="submit">'.($active ? '停用' : '启用').'</button></form><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="friend-links-action-delete" type="submit">删除</button></form></div></article>';
     }
-    return ['title' => '友情链接管理', 'body' => $body.'</div></section>'];
+    return ['title' => '友情链接管理', 'body' => $body.'</div></section></section></section>'];
 }
 
 function friend_links_normalize_url(string $value): ?string

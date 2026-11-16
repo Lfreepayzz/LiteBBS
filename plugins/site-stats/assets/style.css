@@ -1,0 +1,105 @@
+.site-stats-sidebar {
+  order: 3;
+  padding: 1rem;
+  border-radius: 8px;
+  background: #f7f6f1;
+  box-shadow: 0 1px 6px rgb(61 50 35 / 9%);
+}
+
+/* Aurora keeps built-in cards and this plugin in one grid sidebar. */
+.aurora-sidebar .aurora-aside { order: 1; }
+.aurora-sidebar .aurora-categories { order: 2; }
+.aurora-sidebar .site-stats-sidebar { order: 3; }
+.aurora-sidebar .aurora-rules { order: 4; }
+.aurora-sidebar .friend-links-sidebar { order: 5; }
+
+.site-stats-heading {
+  margin: -1rem -1rem .7rem;
+  padding: .65rem .8rem;
+  border-radius: 8px 8px 0 0;
+  background: #e5e2d5;
+}
+
+.site-stats-heading h2,
+.site-stats-sidebar h3,
+.site-stats-sidebar p {
+  margin: 0;
+}
+
+.site-stats-heading h2 {
+  color: #394553;
+  font-size: .86rem;
+}
+
+.site-stats-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .2rem .38rem;
+  color: #756954;
+  font-size: .74rem;
+  line-height: 1.6;
+}
+
+.site-stats-summary strong {
+  color: #394553;
+  font-weight: 800;
+}
+
+.site-stats-summary i {
+  color: #b29f7d;
+  font-style: normal;
+}
+
+.site-stats-sidebar h3 {
+  margin-top: .9rem;
+  padding-top: .8rem;
+  border-top: 1px solid #ddd8c8;
+  color: #665d4e;
+  font-size: .76rem;
+}
+
+.site-stats-users {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .38rem .55rem;
+  margin: .65rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-stats-users li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: .35rem;
+}
+
+.site-stats-users li > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #dceae3;
+  color: #3f6250;
+  font-size: .62rem;
+  font-weight: 800;
+}
+
+.site-stats-users li:nth-child(3n + 2) > span { background: #f0dcc5; color: #754d36; }
+.site-stats-users li:nth-child(3n) > span { background: #dce8f1; color: #435d76; }
+
+.site-stats-users a {
+  min-width: 0;
+  overflow: hidden;
+  color: #655a4b;
+  font-size: .72rem;
+  font-weight: 700;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-stats-users a:hover { color: #117982; }
+.site-stats-empty { margin-top: .6rem !important; color: #7a705d; font-size: .72rem; }

@@ -8,6 +8,89 @@
   box-shadow: 0 16px 40px rgba(23, 32, 42, 0.08);
 }
 
+.destructive-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 760px;
+  margin: 18px 0 0;
+  padding: 18px 20px;
+  border: 1px solid #e5c9c3;
+  border-radius: 6px;
+  background: #fff9f7;
+}
+
+.destructive-confirm-copy {
+  min-width: 0;
+}
+
+.destructive-confirm-copy p {
+  margin: 0;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.destructive-confirm-copy small {
+  display: block;
+  margin-top: 4px;
+  color: #983c31;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.destructive-confirm form {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.destructive-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.destructive-confirm-actions a,
+.destructive-confirm-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 39px;
+  padding: 0 15px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.destructive-confirm-actions a {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+}
+
+.destructive-confirm-actions a:hover {
+  border-color: #aeb8c2;
+  color: var(--fg);
+}
+
+.destructive-confirm-actions button {
+  border: 1px solid #91372d;
+  background: #a43f32;
+  color: #fff;
+}
+
+.destructive-confirm-actions button:hover {
+  background: #883127;
+}
+
+.destructive-confirm-actions button:focus-visible,
+.destructive-confirm-actions a:focus-visible {
+  outline: 3px solid rgba(79, 155, 209, 0.24);
+  outline-offset: 2px;
+}
+
 .plugin-confirm > header {
   display: flex;
   align-items: center;
@@ -227,6 +310,10 @@
 }
 
 @media (max-width: 640px) {
+  .destructive-confirm { align-items: stretch; flex-direction: column; gap: 16px; margin-top: 12px; padding: 16px; }
+  .destructive-confirm form { width: 100%; }
+  .destructive-confirm-actions { align-items: stretch; flex-direction: column-reverse; }
+  .destructive-confirm-actions a, .destructive-confirm-actions button { width: 100%; }
   .plugin-confirm { margin: 0; box-shadow: none; }
   .plugin-confirm > header { padding: 20px 18px; }
   .plugin-confirm-body { padding: 20px 18px; }
@@ -241,6 +328,10 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  .destructive-confirm { border-color: #70453f; background: #382522; }
+  .destructive-confirm-copy p { color: #d8d0ce; }
+  .destructive-confirm-copy small { color: #efb0a7; }
+  .destructive-confirm-actions button { border-color: #bd5a4c; background: #a84437; }
   .plugin-confirm-mark { background: #51312d; color: #f1aaa0; }
   .plugin-confirm-risk { border-color: #70453f; background: #382522; color: #efb0a7; }
   .plugin-confirm-option { background: #202a30; }

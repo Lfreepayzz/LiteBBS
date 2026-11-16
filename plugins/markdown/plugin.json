@@ -3,7 +3,7 @@
   "id": "markdown",
   "title": "Markdown 渲染",
   "description": "为主题首帖和回复提供安全的 Markdown 排版。",
-  "version": "3.0.6",
+  "version": "3.0.7",
   "requires": { "core": ">=1.0 <2.0" },
   "entry": "src/Plugin.php",
   "class": "MarkdownPlugin",
