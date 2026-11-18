@@ -12,6 +12,12 @@ RewriteRule ^admin/?$ index.php [L]
 RewriteRule ^install/?$ install.php [L]
 RewriteRule ^install\.php$ - [L]
 RewriteRule ^assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ - [L]
+RewriteRule ^assets/index\.svg$ - [L]
+<IfModule mod_headers.c>
+ <FilesMatch "\.(?:css|js|map|png|jpe?g|gif|webp|svg)$">
+  Header set Cache-Control "public, max-age=3600"
+ </FilesMatch>
+</IfModule>
 RewriteCond %{REQUEST_URI} ^/templates/ [NC]
 RewriteCond %{REQUEST_URI} !^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ [NC]
 RewriteRule ^ - [R=404,L]

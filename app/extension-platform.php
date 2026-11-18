@@ -32,7 +32,8 @@ function extension_core_capabilities(): array
     return [
         'admin.pages'=>'1.1.0', 'admin.plugin-pages'=>'1.0.0', 'forms'=>'1.0.0', 'jobs'=>'1.0.0', 'metrics'=>'1.0.0',
         'uploads'=>'1.0.0', 'notifications'=>'1.0.0', 'search'=>'1.0.0', 'user.fields'=>'1.0.0',
-        'theme.views'=>'1.0.0', 'events.strict'=>'1.0.0',
+        'theme.views'=>'1.0.0', 'events.strict'=>'1.0.0', 'request.context'=>'1.0.0',
+        'response.json'=>'1.0.0', 'slots.expanded'=>'1.0.0',
     ];
 }
 
@@ -253,7 +254,10 @@ function extension_process_jobs(int $limit=100): int
     for($i=0;$i<max(1,min(1000,$limit));$i++){
         $db->beginTransaction();
         try {
-            $job=h('SELECT id,plugin_name,task_name,idempotency_key,payload_json,attempts FROM extension_jobs WHERE completed_at IS NULL AND available_at<=UTC_TIMESTAMP(6) AND (lease_until IS NULL OR lease_until<=UTC_TIMESTAMP(6)) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
+            // Claim fresh jobs first so the common path uses the ready-queue index.
+            // Expired leases are reclaimed only when no fresh work is available.
+            $job=h('SELECT id,plugin_name,task_name,idempotency_key,payload_json,attempts FROM extension_jobs WHERE completed_at IS NULL AND lease_until IS NULL AND available_at<=UTC_TIMESTAMP(6) ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
+            if(!$job)$job=h('SELECT id,plugin_name,task_name,idempotency_key,payload_json,attempts FROM extension_jobs WHERE completed_at IS NULL AND lease_until IS NOT NULL AND lease_until<=UTC_TIMESTAMP(6) AND available_at<=UTC_TIMESTAMP(6) ORDER BY lease_until,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
             if(!$job){$db->commit();break;}
             $key=$job['plugin_name'].'.'.$job['task_name'];$task=extension_registry()['tasks'][$key]??null;
             if(!$task){h('UPDATE extension_jobs SET completed_at=UTC_TIMESTAMP(6),last_error=? WHERE id=?',['Task is not registered.',(int)$job['id']]);$db->commit();continue;}

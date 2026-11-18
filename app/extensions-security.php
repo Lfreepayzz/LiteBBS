@@ -15,7 +15,7 @@ function extension_manifest_admin_path(array $manifest, string $id): ?string {
 function extension_manifest_public_route_prefix(array $manifest): ?string {
     if (!array_key_exists('public_route_prefix', $manifest)) return null;
     $prefix = (string)$manifest['public_route_prefix'];
-    if (!preg_match('/^[a-z][a-z0-9-]{1,63}$/', $prefix) || in_array($prefix, ['admin','plugin','assets','uploads','install','login','logout','register','me','new','search','market','robots','sitemap','t','c','u'], true)) throw new RuntimeException('Invalid public plugin route prefix.');
+    if (!preg_match('/^[a-z][a-z0-9-]{1,63}$/', $prefix) || in_array($prefix, ['admin','plugin','plugin-assets','assets','uploads','install','login','logout','register','me','new','search','market','robots','sitemap','t','c','u','p','avatar','messages','topic','post','report','user'], true)) throw new RuntimeException('Invalid public plugin route prefix.');
     return $prefix;
 }
 
@@ -43,6 +43,8 @@ function extension_validate_directory(string $directory, string $kind, string $n
     if (!is_array($manifest) || !$nameMatches || !preg_match('/^\d+\.\d+\.\d+$/', (string)($manifest['version'] ?? '')) || ($manifest['entry'] ?? $entry) !== $entry || !is_file($directory.'/'.$entry)) {
         throw new RuntimeException('清单必须包含有效名称、语义版本和固定入口文件');
     }
+    if ($kind === 'theme' && function_exists('theme_manifest_settings')) theme_manifest_settings($manifest);
+    if ($kind === 'theme') extension_validate_theme_pagination($manifest);
     if (!isset($manifest['requires']) || !extension_supports_core((string)$manifest['requires'])) {
         throw new RuntimeException('扩展声明的核心版本范围不兼容');
     }
@@ -157,9 +159,19 @@ function extension_theme_runtime_valid(string &$directory, string $name): bool {
     $signature=@filemtime($directory.'/theme.json').':'.@filesize($directory.'/theme.json').':'.@filemtime($directory.'/layout.php').':'.@filesize($directory.'/layout.php');
     if (isset($checked[$directory])&&$checked[$directory]===$signature) return true;
     $manifest=json_decode((string)@file_get_contents($directory.'/theme.json'),true);
-    if (!is_array($manifest)||!preg_match('/^[a-z][a-z0-9_-]{1,31}$/',(string)($manifest['name']??''))||($manifest['entry']??'layout.php')!=='layout.php'||!isset($manifest['requires'])||!extension_supports_core((string)$manifest['requires'])||!preg_match('/^\d+\.\d+\.\d+$/',(string)($manifest['version']??''))||!is_file($directory.'/layout.php')) return false;
+    if (!is_array($manifest)||!preg_match('/^[a-z][a-z0-9_-]{1,31}$/',(string)($manifest['name']??''))||($manifest['entry']??'layout.php')!=='layout.php'||!isset($manifest['requires'])||!extension_supports_core((string)$manifest['requires'])||!preg_match('/^\d+\.\d+\.\d+$/',(string)($manifest['version']??''))||extension_secure_runtime_file($directory,'layout.php')===null) return false;
+    try { extension_validate_theme_pagination($manifest); } catch (RuntimeException $error) { return false; }
     $checked[$directory]=$signature;
     return true;
+}
+
+function extension_validate_theme_pagination(array $manifest): void {
+    $pagination = $manifest['pagination'] ?? [];
+    if (!is_array($pagination)) throw new RuntimeException('Invalid theme pagination declaration.');
+    foreach ($pagination as $context=>$size) {
+        if ($context === 'home_path' && $size === 'forum') continue;
+        if (!in_array($context, ['home','category','topic'], true) || !is_int($size) || $size < 1 || $size > 100) throw new RuntimeException('Invalid theme pagination size.');
+    }
 }
 
 function extension_secure_runtime_file(string $root, string $relative): ?string {

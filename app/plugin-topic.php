@@ -32,15 +32,17 @@ if ($method === 'POST') {
         $topicId = (int)$pdo->lastInsertId();
         h('INSERT INTO posts(topic_id,user_id,body_markdown,body_html,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6))', [$topicId,$user['id'],$body,extension_render_post_body($body, ['topic_id'=>$topicId,'actor_id'=>(int)$user['id'],'kind'=>'topic'])]);
         $postId = (int)$pdo->lastInsertId();
+        if (topic_last_post_pointer_available()) h('UPDATE topics SET last_post_id=? WHERE id=?', [$postId,$topicId]);
+        if (topic_participants_available()) h('INSERT INTO topic_participants(topic_id,user_id,last_post_id) VALUES(?,?,?) ON DUPLICATE KEY UPDATE last_post_id=GREATEST(last_post_id,VALUES(last_post_id))', [$topicId,$user['id'],$postId]);
         h('INSERT INTO notification_outbox(topic_id,post_id,actor_id,pending_topic_id,created_at) VALUES(?,?,?,?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE created_at=IF(VALUES(post_id)>post_id,VALUES(created_at),created_at),post_id=GREATEST(post_id,VALUES(post_id))', [$topicId,$postId,(int)$user['id'],$topicId]);
-        extension_event_sync('topic.created', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id'], 'post'=>$_POST, 'files'=>$_FILES, 'user'=>$user]);
-        extension_event_sync('topic.created.v2', ['topic_id'=>$topicId,'post_id'=>$postId,'actor_id'=>(int)$user['id'],'title'=>$title,'body'=>$body,'category_id'=>$category,'uploads'=>extension_safe_uploads($_FILES)]);
-        extension_event_async('topic.created.async', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id']]);
         $pdo->commit();
     } catch (Throwable $error) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $error;
     }
+    extension_event('topic.created', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id'], 'post'=>$_POST, 'files'=>$_FILES, 'user'=>$user]);
+    extension_event('topic.created.v2', ['topic_id'=>$topicId,'post_id'=>$postId,'actor_id'=>(int)$user['id'],'title'=>$title,'body'=>$body,'category_id'=>$category,'uploads'=>extension_safe_uploads($_FILES)]);
+    extension_event_async('topic.created.async', ['topic_id'=>$topicId, 'post_id'=>$postId, 'actor_id'=>(int)$user['id']]);
     invalidate('topic:'.$topicId);
     invalidate_topic_listing_cache($category, true);
     redirect('/t/'.$topicId);

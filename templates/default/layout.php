@@ -4,9 +4,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="/assets/index.svg?v=<?= e(asset_version(__DIR__.'/../../assets/index.svg')) ?>" type="image/svg+xml">
   <?= seo_head($title, $description, $indexable, $canonical, $c) ?>
   <?= theme_runtime_assets($safe, $isHomePage, $isTopicPage) ?>
-  <?= plugin_stylesheets() ?><?= extension_stylesheets($requestPath) ?>
+  <?= extension_stylesheets($requestPath) ?>
   <?= extension_slot('head.assets', ['path'=>$requestPath, 'user'=>$user]) ?>
 </head>
 <body<?= $isTopicPage ? ' class="topic-page"' : '' ?>>
@@ -31,7 +32,7 @@
 
   <div class="forum-shell">
     <main class="main-column" id="main-content" tabindex="-1">
-      <div class="content-toolbar"><div class="breadcrumbs"><a href="/">社区</a><span>/</span><span><?= e($title) ?></span></div></div>
+      <div class="content-toolbar"><div class="breadcrumbs"><a href="/">社区</a><span>/</span><span><?= e($title) ?></span></div><?= extension_slot('page.header.after', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?></div>
       <div class="page-content"><?= extension_slot('page.content.before', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?><?= $body ?><?= extension_slot('page.content.after', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?></div>
     </main>
 
@@ -55,7 +56,7 @@
       <?= extension_slot('sidebar.sections', ['path'=>$requestPath, 'user'=>$user]) ?>
     </aside>
   </div>
-  <?= extension_slot('footer.before', ['path'=>$requestPath, 'user'=>$user]) ?>
+   <?= extension_slot('page.footer.before', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?><?= extension_slot('footer.before', ['path'=>$requestPath, 'user'=>$user]) ?>
   <footer class="site-footer"><span><?= e($c['site'] ?? 'LiteBBS') ?></span><span>保持好奇，认真交流。</span></footer>
   <?= extension_slot('body.end', ['path'=>$requestPath, 'user'=>$user]) ?>
   <?= extension_javascripts($requestPath) ?>

@@ -13,7 +13,18 @@ function seo_normalize_canonical(string $canonical): string
     $parts = parse_url($canonical);
     if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) return $canonical;
     $port = isset($parts['port']) ? ':'.(int)$parts['port'] : '';
-    return strtolower((string)$parts['scheme']).'://'.strtolower((string)$parts['host']).$port.seo_normalize_path((string)($parts['path'] ?? '/'));
+    $path = seo_normalize_path((string)($parts['path'] ?? '/'));
+    $query = [];
+    if (isset($parts['query'])) parse_str((string)$parts['query'], $query);
+    elseif ($path === seo_normalize_path((string)($_SERVER['REQUEST_URI'] ?? '/'))) $query = $_GET;
+    $suffix = '';
+    $cursor = $query['cursor'] ?? null;
+    if (($path === '/' || preg_match('~^/c/[1-9][0-9]*$~', $path)) && is_string($cursor) && preg_match('/^[A-Za-z0-9_-]{1,256}$/', $cursor)) {
+        $suffix = '?cursor='.rawurlencode($cursor);
+    } elseif (preg_match('~^/t/[1-9][0-9]*$~', $path) && isset($query['after'], $query['floor']) && is_string($query['after']) && is_string($query['floor']) && ctype_digit($query['after']) && ctype_digit($query['floor']) && (int)$query['after'] > 0) {
+        $suffix = '?after='.(int)$query['after'].'&floor='.(int)$query['floor'];
+    }
+    return strtolower((string)$parts['scheme']).'://'.strtolower((string)$parts['host']).$port.$path.$suffix;
 }
 
 function seo_indexing_enabled(): bool
@@ -42,10 +53,11 @@ function seo_head(string $title, string $description, bool $indexable, string $c
     $config = load_config();
     $seo = is_array($config['seo'] ?? null) ? $config['seo'] : [];
     $siteName = (string)($site['site'] ?? 'LiteBBS');
-    $fullTitle = $title.' · '.$siteName;
+    $fullTitle = $title === '' || $title === $siteName ? $siteName : $title.' · '.$siteName;
     $canonicalPath = seo_normalize_path($canonical);
     if ($canonicalPath === '/' && trim((string)($seo['home_description'] ?? '')) !== '') $description = (string)$seo['home_description'];
     $indexable = $indexable && seo_indexing_enabled();
+    if ($canonicalPath === '/' && isset($_GET['cursor']) && theme_home_page_path((string)($site['theme'] ?? 'default')) === 'forum') $indexable = false;
     $summary = trim((string)preg_replace('/\s+/u', ' ', strip_tags($description)));
     $summary = text_slice($summary, 0, 220);
     $html = '<meta name="description" content="'.e($summary).'">'."\n";

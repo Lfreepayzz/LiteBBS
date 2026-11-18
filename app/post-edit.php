@@ -50,20 +50,29 @@ if ($method === 'POST') {
             $pdo->rollBack();
             fail(409, '帖子已被其他人修改，请刷新后重试');
         }
-        extension_event_sync('post.updated', ['topic_id'=>(int)$post['topic_id'],'post_id'=>(int)$post['id'],'actor_id'=>(int)$user['id'],'post'=>['body'=>$body],'previous_body_markdown'=>(string)$post['body_markdown'],'user'=>$user]);
-        extension_event_sync('post.updated.v2', ['topic_id'=>(int)$post['topic_id'],'post_id'=>(int)$post['id'],'actor_id'=>(int)$user['id'],'body'=>$body,'previous_body_markdown'=>(string)$post['body_markdown']]);
         audit('post.edited', 'post', (int)$post['id']);
         if ($isOriginalPost && ($title !== (string)$post['topic_title'] || $categoryId !== $oldCategoryId)) {
             audit('topic.edited', 'topic', (int)$post['topic_id'], ['old_category_id'=>$oldCategoryId,'category_id'=>$categoryId]);
+            extension_event_async('topic.updated.async', [
+                'topic_id'=>(int)$post['topic_id'],
+                'actor_id'=>(int)$user['id'],
+                'title'=>$title,
+                'category_id'=>$categoryId,
+                'previous_title'=>(string)$post['topic_title'],
+                'previous_category_id'=>$oldCategoryId,
+            ]);
         }
         $pdo->commit();
     } catch (Throwable $error) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $error;
     }
+    extension_event('post.updated', ['topic_id'=>(int)$post['topic_id'],'post_id'=>(int)$post['id'],'actor_id'=>(int)$user['id'],'post'=>['body'=>$body],'previous_body_markdown'=>(string)$post['body_markdown'],'user'=>$user]);
+    extension_event('post.updated.v2', ['topic_id'=>(int)$post['topic_id'],'post_id'=>(int)$post['id'],'actor_id'=>(int)$user['id'],'body'=>$body,'previous_body_markdown'=>(string)$post['body_markdown']]);
 
     $categoryChanged = $isOriginalPost && $categoryId !== $oldCategoryId;
-    invalidate_topic_read_cache((int)$post['topic_id'], $categoryId);
+    $titleChanged = $isOriginalPost && $title !== (string)$post['topic_title'];
+    invalidate_topic_read_cache((int)$post['topic_id'], $categoryId, $categoryChanged || $titleChanged);
     if ($categoryChanged) {
         invalidate_topic_listing_cache($oldCategoryId, true);
         invalidate_topic_listing_cache($categoryId, true);
@@ -82,6 +91,7 @@ if ($isOriginalPost) {
         '<label>分区<select name="category" required>'.$options.'</select></label>';
 }
 $fields .= '<label>正文<textarea name="body" rows="12" maxlength="12000" required>'.e($post['body_markdown']).'</textarea></label>'.
-    extension_slot('post.edit.fields', ['post'=>$post,'user'=>$user]);
+    extension_slot('post.edit.fields', ['post'=>$post,'user'=>$user]).
+    extension_slot('post.edit.form.after', ['post'=>$post,'user'=>$user]);
 page('编辑帖子', form('/p/'.(int)$post['id'].'/edit', '编辑帖子', $fields));
 return;

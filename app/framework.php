@@ -63,6 +63,14 @@ final class Request {
             'pdo'=>$pdo,
         ];
     }
+
+    public function input(string $key, mixed $default = null): mixed {
+        return $this->post[$key] ?? $this->query[$key] ?? $default;
+    }
+
+    public function isSafeMethod(): bool {
+        return in_array($this->method, ['GET', 'HEAD', 'OPTIONS'], true);
+    }
 }
 
 final class Response {
@@ -81,6 +89,12 @@ final class Response {
         }
         $this->headers[$name] = $value;
         return $this;
+    }
+
+    public function json(array $data): self {
+        $encoded = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $this->body = $encoded;
+        return $this->header('Content-Type', 'application/json; charset=utf-8');
     }
 
     public function headers(): array { return $this->headers; }
@@ -158,6 +172,10 @@ final class Kernel {
             $next = $destination;
             $destination = fn(Request $request): ?Response => $middleware($request, $next, $this->container);
         }
-        return $destination($request);
+        try {
+            return $destination($request);
+        } catch (ResponseHalt $halt) {
+            return $halt->response;
+        }
     }
 }

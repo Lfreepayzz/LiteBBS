@@ -21,7 +21,7 @@ $adminExtensionView=['path'=>$requestPath,'user'=>$user,'plugin_management'=>$pl
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?=e($title)?> · <?=e($c['site'] ?? 'LiteBBS')?></title>
 <meta name="robots" content="noindex,follow">
-<link rel="stylesheet" href="/assets/css/admin.css">
+<link rel="stylesheet" href="/assets/css/admin.css?v=<?=asset_version(__DIR__.'/../assets/css/admin.css')?>">
 <link rel="stylesheet" href="/assets/css/admin-settings.css">
 <link rel="stylesheet" href="/assets/css/admin-management.css?v=<?=filemtime(__DIR__.'/../assets/css/admin-management.css')?>">
 <link rel="stylesheet" href="/assets/css/admin-audit.css?v=<?=filemtime(__DIR__.'/../assets/css/admin-audit.css')?>">

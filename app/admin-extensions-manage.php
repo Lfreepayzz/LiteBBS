@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/builtin-plugin-schema.php';
 require_once __DIR__.'/plugin-migrations.php';
+require_once __DIR__.'/extension-platform.php';
 
 if (!in_array($path, ['/admin/themes', '/admin/plugins'], true) || !in_array($method, ['GET', 'POST'], true)) return;
 
@@ -39,6 +40,33 @@ if ($section === 'plugins' && array_key_exists('plugin', $_GET)) {
     return;
 }
 
+if ($section === 'themes' && array_key_exists('theme', $_GET)) {
+    $themeId = (string)($_GET['theme'] ?? '');
+    if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $themeId)) fail(400, '模板管理页面无效');
+    $directory = $root.'/templates/'.$themeId;
+    try { extension_validate_directory($directory, 'theme', $themeId); }
+    catch (Throwable $error) { fail(404, '模板不可用：'.$error->getMessage()); }
+    $manifest = json_decode((string)file_get_contents($directory.'/theme.json'), true);
+    $definitions = is_array($manifest) ? theme_manifest_settings($manifest) : [];
+    if (!$definitions) fail(404, '该模板未声明可管理设置。');
+    $record = h('SELECT config_json FROM themes WHERE name=?', [$themeId])->fetch();
+    if (!$record) fail(404, '模板尚未启用过，无法保存设置。');
+    $values = theme_settings($themeId);
+    $fields = '';
+    foreach ($definitions as $key=>$definition) {
+        $name = 'theme_setting_'.$key; $value = $values[$key] ?? $definition['default'];
+        $label = e($definition['label']);
+        if ($definition['type'] === 'textarea') $control = '<textarea name="'.e($name).'" maxlength="'.(int)$definition['max'].'" rows="5">'.e((string)$value).'</textarea>';
+        elseif ($definition['type'] === 'select') { $control = '<select name="'.e($name).'">'; foreach ($definition['options'] as $optionValue=>$optionLabel) $control .= '<option value="'.e($optionValue).'"'.($value === $optionValue ? ' selected' : '').'>'.e($optionLabel).'</option>'; $control .= '</select>'; }
+        elseif ($definition['type'] === 'checkbox') $control = '<input type="hidden" name="'.e($name).'" value="0"><label class="check-label"><input type="checkbox" name="'.e($name).'" value="1"'.($value ? ' checked' : '').'> '. $label.'</label>';
+        else $control = '<input type="'.($definition['type'] === 'color' ? 'color' : 'text').'" name="'.e($name).'" maxlength="'.(int)($definition['max'] ?? 7).'" value="'.e((string)$value).'">';
+        $fields .= $definition['type'] === 'checkbox' ? '<div class="theme-setting">'.$control.'</div>' : '<label class="theme-setting">'.$label.$control.'</label>';
+    }
+    $body = '<nav class="plugin-management-tabs" aria-label="模板管理页面"><a href="/admin/themes">返回模板列表</a></nav><section class="theme-settings"><p>'.e((string)($manifest['title'] ?? $themeId)).' 的显示设置。</p><form class="form" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($themeId).'"><input type="hidden" name="action" value="save-settings">'.$fields.'<button class="primary">保存设置</button></form></section>';
+    page('模板设置', $body, '', false, true);
+    return;
+}
+
 if ($method === 'POST') {
     require_post();
     $name = (string)($_POST['name'] ?? '');
@@ -48,6 +76,17 @@ if ($method === 'POST') {
         $directory = $root.'/templates/'.$name;
         $manifest = is_file($directory.'/theme.json') ? json_decode((string)file_get_contents($directory.'/theme.json'), true) : null;
         try { extension_validate_directory($directory, 'theme', $name); } catch (Throwable $error) { fail(400, '模板预检失败：'.$error->getMessage()); }
+
+        if ($action === 'save-settings') {
+            $definitions = is_array($manifest) ? theme_manifest_settings($manifest) : [];
+            if (!$definitions) fail(400, '该模板未声明可管理设置。');
+            try { $values = theme_settings_from_input($_POST, $definitions); }
+            catch (Throwable $error) { fail(400, '模板设置无效。'); }
+            h('INSERT INTO themes(name,version,enabled,config_json) VALUES(?,?,0,?) ON DUPLICATE KEY UPDATE version=VALUES(version),config_json=VALUES(config_json)', [$name,(string)($manifest['version'] ?? '1.0.0'),json_encode($values, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);
+            invalidate('theme-settings:'.$name);
+            audit('theme.settings.updated', 'theme', null, ['name'=>$name]);
+            redirect('/admin/themes?theme='.rawurlencode($name));
+        }
 
         if ($action === 'delete') {
             if (empty($_POST['confirm_token'])) confirmation_page('确认删除模板','将永久删除模板目录，此操作不可恢复。','theme.delete',['name'=>$name,'action'=>'delete'],$name);
@@ -80,8 +119,8 @@ if ($method === 'POST') {
         if (empty($_POST['confirm_token'])) confirmation_page('确认永久删除插件','将永久删除插件目录、登记、迁移记录、任务、用户字段、搜索文档和全部插件数据表，此操作不可恢复。','plugin.purge',['name'=>$name,'action'=>'purge'],$name);
         require_confirmation('plugin.purge',$name,(string)$_POST['confirm_token']);
         try { extension_purge_plugin($name); remove_tree($directory); if (is_dir($directory) || is_link($directory)) throw new RuntimeException('插件目录无法完全删除，请检查文件权限'); }
-        catch(Throwable $error){plugin_runtime_invalidate();fail(409,'插件永久删除失败：'.$error->getMessage());}
-        plugin_runtime_invalidate();
+        catch(Throwable $error){extension_invalidate('plugins');fail(409,'插件永久删除失败：'.$error->getMessage());}
+        extension_invalidate('plugins');
         redirect('/admin/plugins');
     }
     if (!in_array($action, ['disable','uninstall'], true)) try { extension_validate_directory($directory, 'plugin', $name); } catch (Throwable $error) { fail(400, '插件预检失败：'.$error->getMessage()); }
@@ -102,8 +141,8 @@ if ($method === 'POST') {
     }
     if ($name === 'zip-remote-attachments' && in_array($action,['install','upgrade','enable'],true)) foreach (builtin_plugin_schema($name) as $sql) h($sql);
     try { extension_plugin_lifecycle($name,$action,!empty($_POST['preserve_data'])); }
-    catch(Throwable $error){plugin_runtime_invalidate();fail(409,'插件操作失败：'.$error->getMessage());}
-    plugin_runtime_invalidate();
+    catch(Throwable $error){extension_invalidate('plugins');fail(409,'插件操作失败：'.$error->getMessage());}
+    extension_invalidate('plugins');
     redirect('/admin/plugins');
 }
 
@@ -117,7 +156,9 @@ if ($section === 'themes') {
         $name = $dir->getFilename();
         $manifest = json_decode((string)@file_get_contents($dir->getPathname().'/theme.json'), true);
         try { extension_validate_directory($dir->getPathname(), 'theme', $name); } catch (Throwable $error) { $invalidExtensions[$name] = $error->getMessage(); continue; }
+        $settings = is_array($manifest) ? theme_manifest_settings($manifest) : [];
         $body .= '<section class="extension-row"><div><h2>'.e($manifest['title'] ?? $name).($name === $active ? ' <small>当前使用</small>' : '').'</h2><p>'.e($name).' · '.e($manifest['version'] ?? '未知版本').' · '.e($manifest['author'] ?? '未知作者').'</p></div><div class="extension-actions">';
+        if ($settings) $body .= '<a class="button extension-manage" href="/admin/themes?theme='.rawurlencode($name).'">管理</a>';
         if ($name !== $active) $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="enable"><button class="primary">启用</button></form>';
         if ($name !== 'default' && $name !== $active) $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="delete"><button>删除模板</button></form>';
         $body .= '</div></section>';

@@ -9,11 +9,13 @@ final class FriendLinksPlugin implements LiteBBSPlugin
     public function boot(PluginContext $context): void
     {
         $context->assets()->css('assets/style.css');
-        $context->slots()->add('sidebar.sections', static fn(array $view): string => friend_links_render_sidebar());
-        $context->routes()->front(['GET', 'POST'], '~^/friend-links/apply$~', static function (Request $request): Response {
-            if ($request->method === 'POST') require_post();
+        $context->slots()->add('sidebar.sections', static fn(array $view): string => ($view['path'] ?? '') === '/' ? friend_links_render_sidebar() : '');
+        $context->routes()->front('GET', '~^/friend-links/apply$~', static function (Request $request): Response {
             return friend_links_application_response($request);
         });
+        $context->routes()->front('POST', '~^/friend-links/apply$~', static function (Request $request): Response {
+            return friend_links_application_response($request);
+        }, ['csrf'=>true]);
         $context->admin()->page('links', '友情链接管理', static function (Request $request): array {
             return friend_links_admin_page($request);
         }, [
@@ -25,7 +27,8 @@ final class FriendLinksPlugin implements LiteBBSPlugin
 
 function friend_links_render_sidebar(): string
 {
-    $links = h('SELECT title,url,description FROM plg_friend_links_links WHERE status="active" ORDER BY created_at DESC,id DESC LIMIT 20')->fetchAll();
+    $cacheKey = 'plugin:friend-links:sidebar';
+    $links = cached($cacheKey.':'.cache_version($cacheKey), 60, static fn(): array => h('SELECT title,url,description FROM plg_friend_links_links WHERE status="active" ORDER BY created_at DESC,id DESC LIMIT 20')->fetchAll());
     $html = '<div class="friend-links-sidebar"><div class="friend-links-heading"><h2>友情链接</h2><a href="/friend-links/apply">申请</a></div>';
     if (!$links) return $html.'<p class="friend-links-help">暂无友情链接。</p></div>';
     $html .= '<div class="friend-links-list">';
@@ -56,6 +59,7 @@ function friend_links_application_response(Request $request): Response
             throw $error;
         }
         audit('friend_links.applied', 'plugin_friend_link', null, ['url' => $url, 'source_url' => $sourceUrl]);
+        friend_links_invalidate_sidebar();
         $message = '申请已提交，管理员确认对方页面包含本站链接后会启用友情链接。';
     }
 
@@ -82,6 +86,7 @@ function friend_links_admin_page(Request $request): array
                 if ((int)($error->errorInfo[1] ?? 0) === 1062) fail(409, '该网站已经是友情链接。');
                 throw $error;
             }
+            friend_links_invalidate_sidebar();
             audit('friend_links.added', 'plugin_friend_link', null, ['url' => $url]);
         } elseif (in_array($action, ['approve', 'toggle', 'delete'], true)) {
             $id = (int)($request->post['id'] ?? 0);
@@ -90,13 +95,16 @@ function friend_links_admin_page(Request $request): array
             if ($action === 'approve') {
                 if ((string)$link['status'] !== 'pending') fail(409, '该友情链接不是待审核状态。');
                 h('UPDATE plg_friend_links_links SET status="active",verified_at=UTC_TIMESTAMP(6),last_checked_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE id=?', [$id]);
+                friend_links_invalidate_sidebar();
                 audit('friend_links.confirmed', 'plugin_friend_link', $id, ['url' => $link['url']]);
             } elseif ($action === 'toggle') {
                 $status = (string)$link['status'] === 'active' ? 'disabled' : 'active';
                 h('UPDATE plg_friend_links_links SET status=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?', [$status, $id]);
+                friend_links_invalidate_sidebar();
                 audit('friend_links.status_changed', 'plugin_friend_link', $id, ['status' => $status, 'url' => $link['url']]);
             } else {
                 h('DELETE FROM plg_friend_links_links WHERE id=?', [$id]);
+                friend_links_invalidate_sidebar();
                 audit('friend_links.deleted', 'plugin_friend_link', $id, ['url' => $link['url']]);
             }
         } else {
@@ -122,6 +130,11 @@ function friend_links_admin_page(Request $request): array
         $body .= '</div><div class="friend-links-admin-actions">'.($pending ? '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="approve"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="primary friend-links-action-approve" type="submit">确认并启用</button></form>' : '').'<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="friend-links-action-toggle" type="submit">'.($active ? '停用' : '启用').'</button></form><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="friend-links-action-delete" type="submit">删除</button></form></div></article>';
     }
     return ['title' => '友情链接管理', 'body' => $body.'</div></section></section></section>'];
+}
+
+function friend_links_invalidate_sidebar(): void
+{
+    invalidate('plugin:friend-links:sidebar');
 }
 
 function friend_links_normalize_url(string $value): ?string

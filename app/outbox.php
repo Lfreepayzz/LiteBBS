@@ -16,7 +16,10 @@ function process_outbox_events(int $limit = 100): int
     for ($i = 0; $i < $limit; $i++) {
         $db->beginTransaction();
         try {
-            $event = h('SELECT id,event_name,event_key,payload_json,attempts FROM outbox_events WHERE processed_at IS NULL AND available_at<=UTC_TIMESTAMP(6) AND (lease_until IS NULL OR lease_until<=UTC_TIMESTAMP(6)) ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
+            // Prefer never-leased work. Keeping expired leases in a second query
+            // preserves the queue contract while letting MySQL use a narrow index.
+            $event = h('SELECT id,event_name,event_key,payload_json,attempts FROM outbox_events WHERE processed_at IS NULL AND lease_until IS NULL AND available_at<=UTC_TIMESTAMP(6) ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
+            if (!$event) $event = h('SELECT id,event_name,event_key,payload_json,attempts FROM outbox_events WHERE processed_at IS NULL AND lease_until IS NOT NULL AND lease_until<=UTC_TIMESTAMP(6) AND available_at<=UTC_TIMESTAMP(6) ORDER BY lease_until,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
             if (!$event) { $db->rollBack(); break; }
             $leaseToken = bin2hex(random_bytes(32));
             // Long enough for the worker timeout; consumers must still make side effects idempotent.

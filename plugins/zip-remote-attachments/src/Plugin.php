@@ -84,15 +84,28 @@ function zip_attachment_create(array $event): void
     if (!isset($cache['prepared'][$key])) zip_attachment_prepare_create($event);
     $prepared=$cache['prepared'][$key]??null;
     if (!is_array($prepared)) return;
-    $storage=null;
-    if ($prepared['kind'] === 'upload') {
-        zip_attachment_check_user_quota((int)$event['user']['id'], (int)$prepared['size']);
-        $directory = dirname(__DIR__, 3).'/uploads/plugin-zip';
-        if (!is_dir($directory) && !mkdir($directory, 0750, true)) fail(500, '插件附件目录不可用');
-        $storage = bin2hex(random_bytes(32));
-        if (!move_uploaded_file((string)$prepared['tmp_name'], $directory.'/'.$storage)) fail(500, 'ZIP 文件保存失败');
+    $storage = null;
+    $storedPath = null;
+    $db = db();
+    $db->beginTransaction();
+    try {
+        if ($prepared['kind'] === 'upload') {
+            // Keep the quota check and record insertion under the same user-row
+            // lock so concurrent topic submissions cannot exceed the quota.
+            zip_attachment_check_user_quota((int)$event['user']['id'], (int)$prepared['size']);
+            $directory = dirname(__DIR__, 3).'/uploads/plugin-zip';
+            if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) fail(500, '插件附件目录不可用');
+            $storage = bin2hex(random_bytes(32));
+            $storedPath = $directory.'/'.$storage;
+            if (!move_uploaded_file((string)$prepared['tmp_name'], $storedPath)) fail(500, 'ZIP 文件保存失败');
+        }
+        h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6))', [(int)$event['post_id'], (int)$event['user']['id'], $prepared['kind'], $storage, $prepared['remote'] ?: null, $prepared['name'], $prepared['size'], $prepared['hash'], $prepared['mode'], $prepared['mode'] === 'points' ? $prepared['points'] : 0]);
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        if ($storedPath !== null) @unlink($storedPath);
+        throw $error;
     }
-    h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6))', [(int)$event['post_id'], (int)$event['user']['id'], $prepared['kind'], $storage, $prepared['remote'] ?: null, $prepared['name'], $prepared['size'], $prepared['hash'], $prepared['mode'], $prepared['mode'] === 'points' ? $prepared['points'] : 0]);
 }
 
 function zip_attachment_grant_reply(array $event): void
@@ -128,6 +141,8 @@ function zip_attachment_update(array $event): void
     $pointsInput = filter_input(INPUT_POST, 'plugin_attachment_points', FILTER_UNSAFE_RAW);
     if ($remoteInput === null && $removeInput === null && $modeInput === null && $pointsInput === null) return;
 
+    $db=db();$db->beginTransaction();
+    try {
     $file = h('SELECT * FROM plg_zip_remote_attachments_files WHERE post_id=? AND status="active" ORDER BY id LIMIT 1 FOR UPDATE', [$postId])->fetch();
     $remote = is_string($remoteInput) ? trim($remoteInput) : '';
     $remove = is_string($removeInput) && $removeInput === '1';
@@ -151,6 +166,11 @@ function zip_attachment_update(array $event): void
         $ownerId = (int)h('SELECT user_id FROM posts WHERE id=? AND status="normal"', [$postId])->fetchColumn();
         if ($ownerId < 1) fail(404, '帖子不存在');
         h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,? ,"remote",NULL,?,?,NULL,NULL,?,?,UTC_TIMESTAMP(6))', [$postId,$ownerId,$remote,$name,$mode,$mode==='points'?$points:0]);
+    }
+    $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
     }
 }
 

@@ -107,7 +107,7 @@ if ($method === 'POST') {
 $error = isset($installError) ? '<p class="install-message install-error">'.e($installError).'</p>' : (isset($installRecoveryNotice) ? '<p class="install-message">'.e($installRecoveryNotice).'</p>' : '');
 $fields = '<section class="install-section"><div class="section-heading"><span>01</span><div><h2>站点信息</h2><p>论坛的名称与公开访问地址</p></div></div><div class="field-grid">'.input('site', '站点名称').input('site_url', '站点 HTTPS URL', 'url', 'placeholder="https://forum.example.com"').'</div></section>';
 $fields .= '<section class="install-section"><div class="section-heading"><span>02</span><div><h2>数据库连接</h2><p>填写论坛使用的数据库及账号</p></div></div><div class="field-grid">'.input('host', '数据库主机').input('port', '端口', 'number', 'value="3306"').input('dbname', '数据库名').input('dbuser', '数据库用户名').input('dbpass', '数据库密码', 'password').'</div></section>';
-$fields .= '<section class="install-section"><div class="section-heading"><span>03</span><div><h2>管理员账户</h2><p>用于首次登录论坛管理后台</p></div></div><div class="field-grid">'.input('admin', '管理员用户名').input('email', '管理员邮箱', 'email').input('password', '管理员密码（6-12 位）', 'password', 'minlength="6" maxlength="12"').'</div></section>';
+    $fields .= '<section class="install-section"><div class="section-heading"><span>03</span><div><h2>管理员账户</h2><p>用于首次登录论坛管理后台</p></div></div><div class="field-grid">'.input('admin', '管理员用户名').input('email', '管理员邮箱', 'email').input('password', '管理员密码（6-12 位）', 'password', 'minlength="6" maxlength="12"').'</div></section>';
 $form = form('/install.php', '完成基础配置', $fields);
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');

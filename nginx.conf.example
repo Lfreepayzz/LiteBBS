@@ -1,3 +1,9 @@
+# Place this map in the http context (alongside the server blocks).
+map $arg_v $litebbs_asset_cache_control {
+    default "public, max-age=3600";
+    ~^[a-f0-9]{12}$ "public, max-age=31536000, immutable";
+}
+
 server {
     listen 80 default_server;
     server_name _;
@@ -62,8 +68,12 @@ server {
 
     location ~ ^/assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ {
         try_files $uri =404;
-        expires 1h;
-        add_header Cache-Control "public, max-age=3600" always;
+        add_header Cache-Control $litebbs_asset_cache_control;
+    }
+
+    location = /assets/index.svg {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=3600";
     }
 
     # PHP authorizes local plugin downloads, then delegates file transfer to
@@ -83,8 +93,7 @@ server {
 
     location ~ ^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ {
         try_files $uri =404;
-        expires 1y;
-        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header Cache-Control $litebbs_asset_cache_control;
     }
     location ~ ^/templates/ { return 404; }
 

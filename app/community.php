@@ -32,7 +32,7 @@ if (preg_match('~^/topic/(\d+)/(bookmark|subscribe)$~', $path, $match) && $metho
     require_post(); $user = current_user(); if (!$user) redirect('/login'); $topicId = (int)$match[1];
     if (!h('SELECT id FROM topics WHERE id=? AND status="normal"', [$topicId])->fetch()) fail(404, '主题不存在');
     $table = $match[2] === 'bookmark' ? 'bookmarks' : 'topic_subscriptions'; $db=db(); $db->beginTransaction();
-    try { h('SELECT id FROM users WHERE id=? FOR UPDATE', [(int)$user['id']])->fetchColumn(); $exists = (bool)h('SELECT 1 FROM '.$table.' WHERE user_id=? AND topic_id=?', [$user['id'], $topicId])->fetchColumn(); if ($exists) h('DELETE FROM '.$table.' WHERE user_id=? AND topic_id=?', [$user['id'], $topicId]); else h('INSERT INTO '.$table.'(user_id,topic_id,created_at) VALUES(?,?,UTC_TIMESTAMP(6))', [$user['id'], $topicId]); $db->commit(); } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+    try { $exists = (bool)h('SELECT 1 FROM '.$table.' WHERE user_id=? AND topic_id=? FOR UPDATE', [$user['id'], $topicId])->fetchColumn(); if ($exists) h('DELETE FROM '.$table.' WHERE user_id=? AND topic_id=?', [$user['id'], $topicId]); else h('INSERT INTO '.$table.'(user_id,topic_id,created_at) VALUES(?,?,UTC_TIMESTAMP(6))', [$user['id'], $topicId]); $db->commit(); } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
     extension_event_async($match[2] === 'bookmark' ? ($exists ? 'bookmark.deleted' : 'bookmark.created') : ($exists ? 'subscription.deleted' : 'subscription.created'), ['topic_id'=>$topicId,'actor_id'=>(int)$user['id']]);
     redirect('/t/'.$topicId);
 }
@@ -41,9 +41,27 @@ if (preg_match('~^/post/(\d+)/like$~', $path, $match) && $method === 'POST') {
     $post = h('SELECT p.id,p.topic_id FROM posts p JOIN topics t ON t.id=p.topic_id WHERE p.id=? AND p.status="normal" AND t.status="normal"', [$postId])->fetch();
     if (!$post) fail(404, '回复不存在');
     $db=db(); $db->beginTransaction();
-    try { h('SELECT id FROM users WHERE id=? FOR UPDATE', [(int)$user['id']])->fetchColumn(); $exists = (bool)h('SELECT 1 FROM reactions WHERE user_id=? AND post_id=? AND reaction="like"', [$user['id'], $postId])->fetchColumn(); if ($exists) h('DELETE FROM reactions WHERE user_id=? AND post_id=? AND reaction="like"', [$user['id'], $postId]); else h('INSERT INTO reactions(user_id,post_id,reaction,created_at) VALUES(?, ?, "like", UTC_TIMESTAMP(6))', [$user['id'], $postId]); $db->commit(); } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+    try { $exists = (bool)h('SELECT 1 FROM reactions WHERE user_id=? AND post_id=? AND reaction="like" FOR UPDATE', [$user['id'], $postId])->fetchColumn(); if ($exists) h('DELETE FROM reactions WHERE user_id=? AND post_id=? AND reaction="like"', [$user['id'], $postId]); else h('INSERT INTO reactions(user_id,post_id,reaction,created_at) VALUES(?, ?, "like", UTC_TIMESTAMP(6))', [$user['id'], $postId]); $db->commit(); } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
     extension_event_async($exists ? 'reaction.deleted' : 'reaction.created', ['post_id'=>$postId,'topic_id'=>(int)$post['topic_id'],'actor_id'=>(int)$user['id'],'reaction'=>'like']);
     redirect('/t/'.(int)$post['topic_id'].'#p'.$postId);
+}
+if (preg_match('~^/post/(\d+)/delete$~', $path, $match) && $method === 'POST') {
+    require_post(); $user = current_user(); if (!$user) redirect('/login'); $postId = (int)$match[1]; $db = db(); $db->beginTransaction();
+    try {
+        $post = h('SELECT p.id,p.topic_id,p.user_id,t.category_id,(SELECT MIN(fp.id) FROM posts fp WHERE fp.topic_id=p.topic_id AND fp.status="normal") AS original_post_id FROM posts p JOIN topics t ON t.id=p.topic_id WHERE p.id=? AND p.status="normal" AND t.status="normal" FOR UPDATE', [$postId])->fetch();
+        if (!$post) fail(404, '回复不存在');
+        if ((int)$post['user_id'] !== (int)$user['id'] && ($user['role'] ?? '') !== 'admin') fail(403, '无权删除此回复');
+        if ((int)$post['id'] === (int)$post['original_post_id']) fail(400, '主题首帖不能在此删除');
+        if (h('UPDATE posts SET status="deleted" WHERE id=? AND status="normal"', [$postId])->rowCount() !== 1) fail(409, '回复状态已变化，请刷新后重试');
+        if (topic_last_post_pointer_available()) h('UPDATE topics SET reply_count=GREATEST(reply_count-1,0),last_post_id=(SELECT id FROM posts WHERE topic_id=? AND status="normal" ORDER BY id DESC LIMIT 1),last_post_at=COALESCE((SELECT created_at FROM posts WHERE topic_id=? AND status="normal" ORDER BY id DESC LIMIT 1),created_at) WHERE id=?', [(int)$post['topic_id'],(int)$post['topic_id'],(int)$post['topic_id']]);
+        else h('UPDATE topics SET reply_count=GREATEST(reply_count-1,0) WHERE id=?', [(int)$post['topic_id']]);
+        h('DELETE FROM notifications WHERE post_id=?', [$postId]);
+        audit('post.deleted', 'post', $postId, ['topic_id'=>(int)$post['topic_id']]);
+        $db->commit();
+    } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+    extension_event_async('post.deleted', ['post_id'=>$postId,'topic_id'=>(int)$post['topic_id'],'actor_id'=>(int)$user['id'],'reason'=>'user']);
+    invalidate_topic_read_cache((int)$post['topic_id'], (int)$post['category_id'], false, false);
+    redirect('/t/'.(int)$post['topic_id'].'#replies');
 }
 if ($path === '/report' && $method === 'POST') {
     require_post(); $user = current_user(); if (!$user) redirect('/login'); limit_action('report', 10, 300, 'user:'.$user['id']); limit_action('report-ip', 30, 3600, hash('sha256',(string)($_SERVER['REMOTE_ADDR']??''))); $type = (string)($_POST['target_type'] ?? ''); $target = (int)($_POST['target_id'] ?? 0); $reason = trim((string)($_POST['reason'] ?? ''));

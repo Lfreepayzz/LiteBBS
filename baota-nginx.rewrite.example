@@ -1,6 +1,7 @@
 # LiteBBS - Baota/BT Panel Nginx pseudo-static rules
 # Paste only this file into: Website -> Settings -> Rewrite.
 # The site root must be the directory containing index.php and install.php.
+# Static assets use a 1-hour cache so unversioned URLs can receive updates.
 
 # Keep the real installer URL independent from pseudo-static routing.
 location = /install {
@@ -10,6 +11,13 @@ location = /install {
 # Only these framework assets may be served from /assets.
 location ~ ^/assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ {
     try_files $uri =404;
+    expires 1h;
+}
+
+# Site favicon is the only public SVG in the shared assets directory.
+location = /assets/index.svg {
+    try_files $uri =404;
+    expires 1h;
 }
 
 # Themes may expose only flat files from their assets directory. The ^~ parent
@@ -17,6 +25,7 @@ location ~ ^/assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ {
 location ^~ /templates/ {
     location ~ ^/templates/[a-z][a-z0-9_-]{1,31}/assets/[A-Za-z0-9][A-Za-z0-9._-]*\.(?:css|js|map|png|jpe?g|gif|webp|svg)$ {
         try_files $uri =404;
+        expires 1h;
     }
     location ~ ^/templates/ {
         return 404;

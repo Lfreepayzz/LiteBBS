@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/extension-hooks.php';
 
-const LITEBBS_EXTENSION_API_VERSION = '2.1';
+const LITEBBS_EXTENSION_API_VERSION = '2.2';
 
 interface LiteBBSPlugin
 {
@@ -68,6 +68,7 @@ final class PluginSlotRegistrar
     public function add(string $slot, callable $renderer, int $priority = 0): void
     {
         if (!preg_match('/^[a-z][a-z0-9._-]{1,63}$/', $slot)) throw new InvalidArgumentException('Invalid plugin slot.');
+        if (!extension_hook_contract('slot', $slot)) throw new InvalidArgumentException('Unknown plugin slot.');
         $this->registry['slots'][$slot][] = ['plugin'=>$this->id, 'priority'=>$priority, 'renderer'=>$renderer];
     }
 }
@@ -81,6 +82,7 @@ final class PluginEventRegistrar
     public function listen(string $event, callable $listener): void
     {
         if (!preg_match('/^[a-z][a-z0-9._-]{1,63}$/', $event)) throw new InvalidArgumentException('Invalid plugin event.');
+        if (!extension_hook_contract('event', $event)) throw new InvalidArgumentException('Unknown plugin event.');
         $this->registry['events'][$event][] = ['plugin'=>$this->id, 'listener'=>$listener];
     }
 }
@@ -94,6 +96,7 @@ final class PluginPreloadRegistrar
     public function add(string $slot, callable $loader): void
     {
         if (!preg_match('/^[a-z][a-z0-9._-]{1,63}$/', $slot)) throw new InvalidArgumentException('Invalid plugin preload slot.');
+        if (!extension_hook_contract('preload', $slot)) throw new InvalidArgumentException('Unknown plugin preload slot.');
         $this->registry['preloads'][$slot][] = ['plugin'=>$this->id, 'loader'=>$loader];
     }
 }
@@ -138,6 +141,7 @@ final class PluginFilterRegistrar
     public function add(string $filter, callable $handler, int $priority = 0): void
     {
         if (!preg_match('/^[a-z][a-z0-9._-]{1,63}$/', $filter)) throw new InvalidArgumentException('Invalid plugin filter.');
+        if (!extension_hook_contract('filter', $filter)) throw new InvalidArgumentException('Unknown plugin filter.');
         $this->registry['filters'][$filter][] = ['plugin'=>$this->id, 'priority'=>$priority, 'handler'=>$handler];
     }
 }
@@ -169,7 +173,8 @@ final class PluginCache
 
     public function remember(string $key, int $ttl, callable $loader): mixed
     {
-        $key = $this->key($key);
+        $baseKey = $this->key($key);
+        $key = $baseKey.':'.cache_version($baseKey);
         $state =& request_cache_state();
         $existing = read_cache($key, max(1, min(86400, $ttl)));
         if ($existing !== null) {
@@ -209,7 +214,7 @@ final class PluginDatabase
     public function query(string $sql, array $parameters = []): PDOStatement
     {
         $normalized = trim($sql);
-        if (str_contains($normalized, ';') || !preg_match('/^(SELECT|INSERT|UPDATE|DELETE)\b/i', $normalized) || preg_match('/\b(?:ALTER|CREATE|DROP|TRUNCATE|GRANT|REVOKE|RENAME|CALL|LOAD|INTO\s+OUTFILE|INTO\s+DUMPFILE)\b/i', $normalized)) throw new RuntimeException('Plugin queries must be a single DML statement on plugin tables; use migrations for schema changes.');
+        if (str_contains($normalized, ';') || preg_match('~(?:--|/\*|\*/)~', $normalized) || !preg_match('/^(SELECT|INSERT|UPDATE|DELETE)\b/i', $normalized) || preg_match('/\b(?:ALTER|CREATE|DROP|TRUNCATE|GRANT|REVOKE|RENAME|CALL|LOAD|INTO\s+OUTFILE|INTO\s+DUMPFILE)\b/i', $normalized)) throw new RuntimeException('Plugin queries must be a single comment-free DML statement on plugin tables; use migrations for schema changes.');
         preg_match_all('/\b(?:FROM|JOIN|INTO)\s+(`?[a-zA-Z0-9_]+`?)/i', $normalized, $matches);
         $tables = array_map(static fn(string $table): string => trim($table, '`'), $matches[1] ?? []);
         if (preg_match('/^UPDATE\s+(`?[a-zA-Z0-9_]+`?)/i', $normalized, $update)) $tables[] = trim($update[1], '`');
@@ -247,6 +252,7 @@ function extension_manifest_hooks(array $manifest, string $kind): ?array
     if (!is_array($hooks)) throw new RuntimeException('Plugin '.$key.' declaration must be an array.');
     foreach ($hooks as $hook) {
         if (!is_string($hook) || !preg_match('/^[a-z][a-z0-9._-]{1,63}$/', $hook)) throw new RuntimeException('Invalid plugin '.$key.' declaration.');
+        if (!extension_hook_contract($kind, $hook)) throw new RuntimeException('Unknown plugin '.$key.' declaration: '.$hook);
     }
     return array_values(array_unique($hooks));
 }
@@ -292,6 +298,41 @@ function extension_asset_matches(array $asset, string $path): bool
     return (bool)array_intersect($asset['pages'] ?? ['all'], $surfaces);
 }
 
+function extension_declared_assets(?string $onlyPlugin = null): array
+{
+    static $assets = [];
+    $version = cache_version('plugins');
+    $key = $version.':'.($onlyPlugin ?? '*');
+    if (!isset($assets[$key])) {
+        $declared = [];
+        $fallback = false;
+        foreach (extension_enabled_plugins() as $record) {
+            $id = (string)($record['name'] ?? '');
+            if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
+            if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
+            try {
+                $manifest = extension_plugin_manifest($id);
+                if ($manifest === null) { $fallback = true; continue; }
+                if (!is_array($manifest) || ($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $id) { $fallback = true; continue; }
+                $paths = extension_manifest_assets($manifest);
+                if ($paths === null) { $fallback = true; continue; }
+                foreach ($paths as $asset) $declared[$id.'|'.$asset['path']] = ['plugin'=>$id] + $asset;
+            } catch (Throwable $error) {
+                $fallback = true;
+                error_log('extension assets '.$id.' failed: '.$error->getMessage());
+            }
+        }
+        $assets[$key] = ['declared'=>$declared, 'fallback'=>$fallback];
+    }
+    if ($assets[$key]['fallback']) extension_runtime_load($onlyPlugin);
+    $declared = $assets[$key]['declared'];
+    foreach (extension_registry()['assets'] as $asset) {
+        if ($onlyPlugin !== null && $asset['plugin'] !== $onlyPlugin) continue;
+        $declared[$asset['plugin'].'|'.$asset['path']] = $asset;
+    }
+    return array_values($declared);
+}
+
 function extension_config_value_valid(mixed $value, int $depth = 0): bool
 {
     if ($depth > 12) return false;
@@ -334,26 +375,31 @@ function extension_candidate_plugins(string $kind, ?string $hook): array
     static $indexes = [];
     $scanKey = cache_version('plugins').':'.$kind;
     if (isset($indexes[$scanKey])) return array_merge($indexes[$scanKey]['fallback'], $indexes[$scanKey]['hooks'][$hook] ?? []);
-    $root = dirname(__DIR__).'/plugins/';
-    $index = ['fallback'=>[], 'hooks'=>[]];
-    foreach ($enabled as $record) {
-        $id = (string)($record['name'] ?? '');
-        if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
-        $manifestFile = $root.$id.'/plugin.json';
-        if (!is_file($manifestFile)) {
-            $index['fallback'][] = $record;
-            continue;
+    // Cache only manifest metadata. This prevents repeated directory and JSON
+    // scans whenever one page invokes several slots or events.
+    $index = cached('extensions:hook-index:v2:'.$scanKey, 300, static function () use ($enabled, $kind): array {
+        $root = dirname(__DIR__).'/plugins/';
+        $built = ['fallback'=>[], 'hooks'=>[]];
+        foreach ($enabled as $record) {
+            $id = (string)($record['name'] ?? '');
+            if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
+            $manifestFile = $root.$id.'/plugin.json';
+            if (!is_file($manifestFile)) {
+                $built['fallback'][] = $record;
+                continue;
+            }
+            try {
+                $manifest = extension_plugin_manifest($id);
+                if (!is_array($manifest)) throw new RuntimeException('Invalid plugin manifest.');
+                $hooks = extension_manifest_hooks($manifest, $kind);
+                if ($hooks === null) $built['fallback'][] = $record;
+                else foreach ($hooks as $declaredHook) $built['hooks'][$declaredHook][] = $record;
+            } catch (Throwable $error) {
+                error_log('extension manifest '.$id.' failed: '.$error->getMessage());
+            }
         }
-        try {
-            $manifest = extension_plugin_manifest($id);
-            if (!is_array($manifest)) throw new RuntimeException('Invalid plugin manifest.');
-            $hooks = extension_manifest_hooks($manifest, $kind);
-            if ($hooks === null) $index['fallback'][] = $record;
-            else foreach ($hooks as $declaredHook) $index['hooks'][$declaredHook][] = $record;
-        } catch (Throwable $error) {
-            error_log('extension manifest '.$id.' failed: '.$error->getMessage());
-        }
-    }
+        return $built;
+    });
     $indexes[$scanKey] = $index;
     return array_merge($index['fallback'], $index['hooks'][$hook] ?? []);
 }
@@ -373,23 +419,72 @@ function extension_public_route_plugin(string $path): ?string
 {
     if (!preg_match('~^/([a-z][a-z0-9-]{1,63})(?:/|$)~', $path, $match)) return null;
     $prefix = $match[1];
-    $owner = null;
-    foreach (extension_enabled_plugins() as $record) {
-        $id = (string)($record['name'] ?? '');
-        if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
-        try {
-            $manifest = extension_plugin_manifest($id);
-            if (!is_array($manifest) || extension_manifest_public_route_prefix($manifest) !== $prefix) continue;
-            if ($owner !== null) {
-                error_log('duplicate public plugin route prefix: '.$prefix);
-                return null;
+    // These built-in namespaces can never be valid V2 plugin prefixes. Avoid
+    // loading the enabled-plugin registry on every normal forum request.
+    if (in_array($prefix, ['admin','plugin','plugin-assets','assets','uploads','install','login','logout','register','me','new','search','market','robots','sitemap','t','c','u','p','avatar','messages','topic','post','report','user'], true)) return null;
+    static $maps = [];
+    $version = cache_version('plugins');
+    if (!isset($maps[$version])) {
+        $maps[$version] = cached('extensions:public-route-prefixes:v1:'.$version, 300, static function (): array {
+            $map = [];
+            foreach (extension_enabled_plugins() as $record) {
+                $id = (string)($record['name'] ?? '');
+                if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
+                try {
+                    $manifest = extension_plugin_manifest($id);
+                    $declared = is_array($manifest) ? extension_manifest_public_route_prefix($manifest) : null;
+                    if ($declared === null) continue;
+                    if (isset($map[$declared])) {
+                        error_log('duplicate public plugin route prefix: '.$declared);
+                        $map[$declared] = '';
+                    } else $map[$declared] = $id;
+                } catch (Throwable $error) {
+                    error_log('extension manifest '.$id.' failed: '.$error->getMessage());
+                }
             }
-            $owner = $id;
-        } catch (Throwable $error) {
-            error_log('extension manifest '.$id.' failed: '.$error->getMessage());
-        }
+            return $map;
+        });
     }
-    return $owner;
+    $owner = (string)($maps[$version][$prefix] ?? '');
+    return $owner !== '' ? $owner : null;
+}
+
+function extension_plugin_asset_response(string $plugin, string $asset): \LiteBBS\Framework\Response
+{
+    if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $plugin) || $asset === '' || str_contains($asset, "\0")) return new \LiteBBS\Framework\Response('Not Found', 404);
+    $enabled = false;
+    foreach (extension_enabled_plugins() as $record) {
+        if (($record['name'] ?? '') === $plugin) { $enabled = true; break; }
+    }
+    if (!$enabled) return new \LiteBBS\Framework\Response('Not Found', 404);
+
+    $manifest = extension_plugin_manifest($plugin);
+    if (!is_array($manifest) || ($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $plugin) return new \LiteBBS\Framework\Response('Not Found', 404);
+    $assets = extension_manifest_assets($manifest);
+    $type = null;
+    foreach ($assets ?? [] as $entry) {
+        if (($entry['path'] ?? '') === $asset && in_array($entry['type'] ?? '', ['css', 'js'], true)) { $type = $entry['type']; break; }
+    }
+    if ($type === null) return new \LiteBBS\Framework\Response('Not Found', 404);
+
+    $file = extension_secure_runtime_file(dirname(__DIR__).'/plugins/'.$plugin, $asset);
+    if ($file === null) return new \LiteBBS\Framework\Response('Not Found', 404);
+    $etag = '"'.asset_version($file).'"';
+    $cacheControl = isset($_GET['v']) && is_string($_GET['v']) && hash_equals(trim($etag, '"'), $_GET['v'])
+        ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=3600';
+    if (hash_equals($etag, (string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''))) {
+        return (new \LiteBBS\Framework\Response('', 304))
+            ->header('ETag', $etag)
+            ->header('Cache-Control', $cacheControl);
+    }
+    $body = file_get_contents($file);
+    if (!is_string($body)) return new \LiteBBS\Framework\Response('Not Found', 404);
+    return (new \LiteBBS\Framework\Response($body))
+        ->header('Content-Type', $type === 'js' ? 'application/javascript; charset=utf-8' : 'text/css; charset=utf-8')
+        ->header('ETag', $etag)
+        ->header('Cache-Control', $cacheControl)
+        ->header('X-Content-Type-Options', 'nosniff');
 }
 
 function extension_route_options(array $methods, array $options): array
@@ -398,7 +493,9 @@ function extension_route_options(array $methods, array $options): array
     if ($unknown) throw new InvalidArgumentException('Unknown plugin route option.');
     $auth = (string)($options['auth'] ?? 'public');
     if (!in_array($auth, ['public', 'user', 'moderator', 'admin'], true)) throw new InvalidArgumentException('Invalid plugin route authorization.');
-    $csrf = (bool)($options['csrf'] ?? false);
+    $unsafeMethods = array_diff($methods, ['GET', 'HEAD', 'OPTIONS']);
+    if ($unsafeMethods && $methods !== ['POST']) throw new InvalidArgumentException('Plugin state-changing routes must be POST-only.');
+    $csrf = $unsafeMethods ? true : (bool)($options['csrf'] ?? false);
     if ($csrf && $methods !== ['POST']) throw new InvalidArgumentException('Plugin CSRF enforcement requires a POST-only route.');
     return ['auth'=>$auth, 'csrf'=>$csrf];
 }
@@ -421,7 +518,9 @@ function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = 
     static $loaded = [];
     $registry =& extension_registry();
     $enabled = $hookKind === null ? extension_enabled_plugins() : extension_candidate_plugins($hookKind, $hook);
+    if ($enabled) require_once __DIR__.'/extension-platform.php';
     $root = dirname(__DIR__).'/plugins/';
+    $registryChanged = false;
     foreach ($enabled as $record) {
         $id = (string)($record['name'] ?? '');
         if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
@@ -466,22 +565,19 @@ function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = 
                 else $registry[$key] = array_merge($registry[$key], $temporary[$key]);
             }
             $registry['plugins'][$id] = ['manifest'=>$manifest, 'plugin'=>$plugin, 'config'=>$config];
+            $registryChanged = true;
         } catch (Throwable $error) {
             error_log('extension plugin '.$id.' disabled: '.$error->getMessage());
         }
     }
-    foreach ($registry['slots'] as &$entries) {
-        usort($entries, static fn(array $a, array $b): int => $b['priority'] <=> $a['priority']);
+    if ($registryChanged) {
+        foreach (['slots','renderers','filters'] as $kind) {
+            foreach ($registry[$kind] as &$entries) {
+                if (count($entries) > 1) usort($entries, static fn(array $a, array $b): int => $b['priority'] <=> $a['priority']);
+            }
+            unset($entries);
+        }
     }
-    unset($entries);
-    foreach ($registry['renderers'] as &$entries) {
-        usort($entries, static fn(array $a, array $b): int => $b['priority'] <=> $a['priority']);
-    }
-    unset($entries);
-    foreach ($registry['filters'] as &$entries) {
-        usort($entries, static fn(array $a, array $b): int => $b['priority'] <=> $a['priority']);
-    }
-    unset($entries);
     return $registry['plugins'];
 }
 
@@ -567,7 +663,9 @@ function extension_slot(string $slot, array $view = []): string
         $beforeSql=(int)(request_cache_state()['@sql-count']??0);
         try {
             $output = ($entry['renderer'])($view);
-            if (is_string($output)) $html .= $output;
+            if (!is_string($output)) throw new RuntimeException('Plugin slot must return HTML text.');
+            if (strlen($output) > 1048576 || strlen($html) + strlen($output) > 1048576) throw new RuntimeException('Plugin slot output exceeds 1 MiB.');
+            $html .= $output;
             if ((microtime(true) - $started) > 0.02) { error_log('plugin slot '.$entry['plugin'].' exceeded 20ms budget'); extension_plugin_failure($entry['plugin']); }
             extension_metric_observe($entry['plugin'],'slot.'.$slot,(microtime(true)-$started)*1000,(int)(request_cache_state()['@sql-count']??0)-$beforeSql,false);
         } catch (Throwable $error) {
@@ -719,42 +817,10 @@ function extension_plugin_failure(string $id): void
 
 function extension_stylesheets(string $requestPath, ?string $onlyPlugin = null): string
 {
-    $records = extension_enabled_plugins();
     $root = dirname(__DIR__).'/plugins/';
-    $fallback = false;
-    $manifestById = [];
-    foreach ($records as $record) {
-        $id = (string)($record['name'] ?? '');
-        if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
-        if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
-        $manifestFile = $root.$id.'/plugin.json';
-        if (!is_file($manifestFile)) { $fallback = true; continue; }
-        try {
-            $manifest = extension_plugin_manifest($id);
-            if (!is_array($manifest) || ($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $id || extension_manifest_assets($manifest) === null) $fallback = true;
-            else $manifestById[$id] = $manifest;
-        } catch (Throwable $error) {
-            $fallback = true;
-        }
-    }
-    if ($fallback) extension_runtime_load($onlyPlugin);
     $html = '';
-    $declared = [];
-    foreach ($records as $record) {
-        $id = (string)($record['name'] ?? '');
-        if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
-        if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
-        $manifest = $manifestById[$id] ?? null;
-        $paths = is_array($manifest) ? extension_manifest_assets($manifest) : null;
-        if (is_array($paths) && ($manifest['schema'] ?? null) === 1 && ($manifest['id'] ?? '') === $id) {
-            foreach ($paths as $asset) if (($asset['type'] ?? '') === 'css' && extension_asset_matches($asset, $requestPath)) $declared[$id.'|'.$asset['path']] = ['plugin'=>$id, 'path'=>$asset['path']];
-        }
-    }
-    foreach (extension_registry()['assets'] as $asset) {
-        if ($onlyPlugin !== null && $asset['plugin'] !== $onlyPlugin) continue;
-        if ($asset['type'] === 'css' && extension_asset_matches($asset, $requestPath)) $declared[$asset['plugin'].'|'.$asset['path']] = ['plugin'=>$asset['plugin'], 'path'=>$asset['path']];
-    }
-    foreach ($declared as $asset) {
+    foreach (extension_declared_assets($onlyPlugin) as $asset) {
+        if ($asset['type'] !== 'css' || !extension_asset_matches($asset, $requestPath)) continue;
         $file = extension_secure_runtime_file($root.$asset['plugin'], $asset['path']);
         if ($file === null) continue;
         $version = asset_version($file);
@@ -765,29 +831,10 @@ function extension_stylesheets(string $requestPath, ?string $onlyPlugin = null):
 
 function extension_javascripts(string $requestPath, ?string $onlyPlugin = null): string
 {
-    $records = extension_enabled_plugins();
     $root = dirname(__DIR__).'/plugins/';
-    $declared = [];
-    $fallback = false;
-    foreach ($records as $record) {
-        $id = (string)($record['name'] ?? '');
-        if ($onlyPlugin !== null && $id !== $onlyPlugin) continue;
-        if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) continue;
-        $manifest = extension_plugin_manifest($id);
-        if (!is_array($manifest) || ($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $id) continue;
-        $assets = extension_manifest_assets($manifest);
-        if ($assets === null) { $fallback = true; continue; }
-        foreach ($assets as $asset) {
-            if (($asset['type'] ?? '') === 'js' && extension_asset_matches($asset, $requestPath)) $declared[$id.'|'.$asset['path']] = ['plugin'=>$id, 'path'=>$asset['path']];
-        }
-    }
-    if ($fallback) extension_runtime_load($onlyPlugin);
-    foreach (extension_registry()['assets'] as $asset) {
-        if ($onlyPlugin !== null && $asset['plugin'] !== $onlyPlugin) continue;
-        if ($asset['type'] === 'js' && extension_asset_matches($asset, $requestPath)) $declared[$asset['plugin'].'|'.$asset['path']] = ['plugin'=>$asset['plugin'], 'path'=>$asset['path']];
-    }
     $html = '';
-    foreach ($declared as $asset) {
+    foreach (extension_declared_assets($onlyPlugin) as $asset) {
+        if ($asset['type'] !== 'js' || !extension_asset_matches($asset, $requestPath)) continue;
         $file = extension_secure_runtime_file($root.$asset['plugin'], $asset['path']);
         if ($file === null) continue;
         $version = asset_version($file);

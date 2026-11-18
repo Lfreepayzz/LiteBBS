@@ -21,8 +21,8 @@ if ($method === 'POST') {
         elseif ($report['target_type'] === 'post') {
             $post = h('SELECT p.topic_id,p.status,(SELECT id FROM posts WHERE topic_id=p.topic_id ORDER BY id LIMIT 1) AS first_post_id FROM posts p WHERE p.id=?', [(int)$report['target_id']])->fetch();
             $topicId = (int)($post['topic_id'] ?? 0);
-            if ($post && h('UPDATE posts SET status="deleted" WHERE id=? AND status="normal"', [(int)$report['target_id']])->rowCount() === 1) { extension_event_async('post.deleted', ['post_id'=>(int)$report['target_id'],'topic_id'=>$topicId,'actor_id'=>(int)$actor['id'],'reason'=>'report']); if ($topicId > 0 && (int)$post['first_post_id'] !== (int)$report['target_id']) h('UPDATE topics SET reply_count=GREATEST(reply_count-1,0) WHERE id=?', [$topicId]); }
-            if ($topicId > 0) invalidate_topic_read_cache($topicId);
+            if ($post && h('UPDATE posts SET status="deleted" WHERE id=? AND status="normal"', [(int)$report['target_id']])->rowCount() === 1) { extension_event_async('post.deleted', ['post_id'=>(int)$report['target_id'],'topic_id'=>$topicId,'actor_id'=>(int)$actor['id'],'reason'=>'report']); if ($topicId > 0 && (int)$post['first_post_id'] !== (int)$report['target_id']) { if (topic_last_post_pointer_available()) h('UPDATE topics SET reply_count=GREATEST(reply_count-1,0),last_post_id=(SELECT id FROM posts WHERE topic_id=? AND status="normal" ORDER BY id DESC LIMIT 1),last_post_at=COALESCE((SELECT created_at FROM posts WHERE topic_id=? AND status="normal" ORDER BY id DESC LIMIT 1),created_at) WHERE id=?', [$topicId,$topicId,$topicId]); else h('UPDATE topics SET reply_count=GREATEST(reply_count-1,0) WHERE id=?', [$topicId]); } }
+            if ($topicId > 0) invalidate_topic_read_cache($topicId, null, false, false);
         }
         elseif ($report['target_type'] === 'user') h('UPDATE users SET status="banned" WHERE id=?', [(int)$report['target_id']]);
         else fail(400, '举报目标无效');

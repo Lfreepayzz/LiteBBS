@@ -12,7 +12,7 @@ final class SiteStatsPlugin implements LiteBBSPlugin
 
 function site_stats_render_sidebar(): string
 {
-    $data = cached('plugin:site-stats:sidebar', 60, static function (): array {
+    $data = cached('plugin:site-stats:sidebar', 300, static function (): array {
         $stats = h('SELECT (SELECT COUNT(*) FROM topics WHERE status="normal") AS topics, (SELECT COALESCE(SUM(reply_count),0) FROM topics WHERE status="normal") AS replies, (SELECT COUNT(*) FROM users WHERE status="active") AS users')->fetch() ?: ['topics'=>0, 'replies'=>0, 'users'=>0];
         $users = h('SELECT username FROM users WHERE status="active" ORDER BY created_at DESC,id DESC LIMIT 10')->fetchAll();
         return ['stats'=>$stats, 'users'=>$users];

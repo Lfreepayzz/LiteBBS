@@ -1,7 +1,128 @@
 <?php
 declare(strict_types=1);
 
-const LITEBBS_THEME_VIEW_API_VERSION = 1;
+const LITEBBS_THEME_VIEW_API_VERSION = 2;
+
+function theme_pagination_manifest(string $theme): array
+{
+    static $manifests = [];
+    if (!array_key_exists($theme, $manifests)) {
+        $file = extension_secure_runtime_file(theme_runtime_directory($theme), 'theme.json');
+        $manifest = $file !== null ? json_decode((string)file_get_contents($file), true) : null;
+        $manifests[$theme] = is_array($manifest) ? $manifest : [];
+    }
+    return $manifests[$theme];
+}
+
+function theme_page_size(string $theme, string $context): int
+{
+    static $sizes = [];
+    if (!in_array($context, ['home', 'category', 'topic'], true)) throw new InvalidArgumentException('Invalid pagination context.');
+    if (!isset($sizes[$theme])) {
+        $manifest = theme_pagination_manifest($theme);
+        $sizes[$theme] = ['home'=>30, 'category'=>30, 'topic'=>20];
+        foreach ($sizes[$theme] as $key=>$default) {
+            $size = is_array($manifest) ? ($manifest['pagination'][$key] ?? $default) : $default;
+            if (is_int($size) && $size >= 1 && $size <= 100) $sizes[$theme][$key] = $size;
+        }
+    }
+    return $sizes[$theme][$context];
+}
+
+function theme_home_page_path(string $theme): string
+{
+    static $paths = [];
+    if (!array_key_exists($theme, $paths)) {
+        $manifest = theme_pagination_manifest($theme);
+        $paths[$theme] = is_array($manifest) && ($manifest['pagination']['home_path'] ?? null) === 'forum' ? 'forum' : '';
+    }
+    return $paths[$theme];
+}
+
+function theme_manifest_settings(array $manifest): array
+{
+    $definitions = $manifest['settings'] ?? [];
+    if (!is_array($definitions) || count($definitions) > 32) throw new RuntimeException('Theme settings declaration is invalid.');
+    $validated = [];
+    foreach ($definitions as $key=>$definition) {
+        if (!is_string($key) || !preg_match('/^[a-z][a-z0-9_]{0,31}$/', $key) || !is_array($definition)) throw new RuntimeException('Theme setting name is invalid.');
+        $type = (string)($definition['type'] ?? '');
+        $label = (string)($definition['label'] ?? '');
+        if (!in_array($type, ['text','textarea','select','checkbox','color'], true) || $label === '' || text_length($label) > 80) throw new RuntimeException('Theme setting definition is invalid.');
+        $item = ['type'=>$type,'label'=>$label,'default'=>$definition['default'] ?? ($type === 'checkbox' ? false : '')];
+        if (in_array($type, ['text','textarea'], true)) {
+            $item['max'] = max(1, min(2000, (int)($definition['max'] ?? ($type === 'textarea' ? 500 : 120))));
+            if (!is_string($item['default']) || text_length($item['default']) > $item['max']) throw new RuntimeException('Theme setting default is invalid.');
+        } elseif ($type === 'color') {
+            if (!is_string($item['default']) || !preg_match('/^#[0-9a-fA-F]{6}$/', $item['default'])) throw new RuntimeException('Theme color default is invalid.');
+        } elseif ($type === 'checkbox') {
+            if (!is_bool($item['default'])) throw new RuntimeException('Theme checkbox default is invalid.');
+        } else {
+            $options = $definition['options'] ?? [];
+            if (!is_array($options) || !$options || count($options) > 32 || !is_string($item['default'])) throw new RuntimeException('Theme select setting is invalid.');
+            $item['options'] = [];
+            foreach ($options as $value=>$optionLabel) {
+                if (!is_string($value) || !preg_match('/^[a-z0-9_-]{1,32}$/', $value) || !is_string($optionLabel) || $optionLabel === '' || text_length($optionLabel) > 80) throw new RuntimeException('Theme select option is invalid.');
+                $item['options'][$value] = $optionLabel;
+            }
+            if (!array_key_exists($item['default'], $item['options'])) throw new RuntimeException('Theme select default is invalid.');
+        }
+        $validated[$key] = $item;
+    }
+    return $validated;
+}
+
+function theme_settings_from_input(array $input, array $definitions): array
+{
+    $values = [];
+    foreach ($definitions as $key=>$definition) {
+        $value = $input['theme_setting_'.$key] ?? null;
+        if ($definition['type'] === 'checkbox') { $values[$key] = $value === '1'; continue; }
+        if (!is_string($value)) throw new InvalidArgumentException('Theme setting input is invalid.');
+        $value = trim($value);
+        if (in_array($definition['type'], ['text','textarea'], true) && text_length($value) <= $definition['max']) $values[$key] = $value;
+        elseif ($definition['type'] === 'color' && preg_match('/^#[0-9a-fA-F]{6}$/', $value)) $values[$key] = $value;
+        elseif ($definition['type'] === 'select' && isset($definition['options'][$value])) $values[$key] = $value;
+        else throw new InvalidArgumentException('Theme setting value is invalid.');
+    }
+    return $values;
+}
+
+function theme_settings(string $theme): array
+{
+    $directory = theme_runtime_directory($theme);
+    $file = extension_secure_runtime_file($directory, 'theme.json');
+    if ($file === null) return [];
+    try { $manifest = json_decode((string)file_get_contents($file), true, 32, JSON_THROW_ON_ERROR); }
+    catch (Throwable $error) { return []; }
+    if (!is_array($manifest)) return [];
+    $definitions = theme_manifest_settings($manifest);
+    if (!$definitions) return [];
+    $version = cache_version('theme-settings:'.$theme);
+    $cached = cached('theme-settings:v1:'.$theme.':'.$version, 300, static function () use ($theme): array {
+        $json = h('SELECT config_json FROM themes WHERE name=?', [$theme])->fetchColumn();
+        $values = is_string($json) ? json_decode($json, true) : [];
+        return [is_array($values) ? $values : []];
+    });
+    $stored = is_array($cached[0] ?? null) ? $cached[0] : [];
+    $values = [];
+    foreach ($definitions as $key=>$definition) {
+        $value = $stored[$key] ?? $definition['default'];
+        $valid = match($definition['type']) {
+            'text','textarea' => is_string($value) && text_length($value) <= $definition['max'],
+            'color' => is_string($value) && preg_match('/^#[0-9a-fA-F]{6}$/', $value),
+            'checkbox' => is_bool($value),
+            'select' => is_string($value) && isset($definition['options'][$value]),
+        };
+        $values[$key] = $valid ? $value : $definition['default'];
+    }
+    return $values;
+}
+
+function theme_current_settings(): array
+{
+    return theme_settings((string)(load_config()['theme'] ?? 'default'));
+}
 
 final class ThemeTrustedHtml
 {
@@ -19,6 +140,7 @@ function theme_view_contracts(): array
         'profile'=>['profile'=>'array','posts'=>'array','viewer'=>'nullable_array'],
         'components.post'=>['post'=>'array','topic'=>'array','viewer'=>'nullable_array','body_html'=>'html'],
         'forms.reply'=>['topic'=>'array','viewer'=>'array','errors'=>'array','values'=>'array'],
+        'pagination'=>['pagination'=>'array'],
     ];
 }
 

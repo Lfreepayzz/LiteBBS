@@ -14,7 +14,7 @@
     "events": ["topic.create.preflight", "topic.created", "post.created", "post.updated"]
   },
   "public_route_prefix": "attachments",
-  "assets": ["assets/style.css"],
+  "assets": [{"path": "assets/style.css", "pages": ["topic.create", "topic.view", "post.edit"]}],
   "database_tables": [
     "plg_zip_remote_attachments_files",
     "plg_zip_remote_attachments_grants"

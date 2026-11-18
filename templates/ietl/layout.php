@@ -4,9 +4,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="/assets/index.svg?v=<?= e(asset_version(__DIR__.'/../../assets/index.svg')) ?>" type="image/svg+xml">
   <?= seo_head($title, $description, $indexable, $canonical, $c) ?>
   <?= theme_runtime_assets($safe, $isHomePage, $isTopicPage) ?>
-  <?= plugin_stylesheets() ?><?= extension_stylesheets($requestPath) ?>
+  <?= extension_stylesheets($requestPath) ?>
   <?= extension_slot('head.assets', ['path'=>$requestPath, 'user'=>$user]) ?>
 </head>
 <body<?= $isTopicPage ? ' class="topic-page"' : '' ?>>
@@ -18,10 +19,10 @@
     </div>
   </header>
   <main class="aurora-main">
-    <div class="aurora-breadcrumb"><a href="/">社区</a><span>/</span><strong><?= e($title) ?></strong></div>
+    <div class="aurora-breadcrumb"><a href="/">社区</a><span>/</span><strong><?= e($title) ?></strong><?= extension_slot('page.header.after', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?></div>
     <div class="aurora-grid"><section class="aurora-content"><?= extension_slot('page.content.before', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?><?= $body ?><?= extension_slot('page.content.after', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?></section><div class="aurora-sidebar"><aside class="aurora-aside"><div class="aurora-aside-orb"></div><span class="aurora-kicker">AURORA COMMUNITY</span><h2>让好观点<br>被看见。</h2><p>分享经验，认真讨论，和志同道合的人一起建立有价值的社区。</p><?php if ($user): ?><a class="aurora-action" href="/new">发起新讨论 <span>↗</span></a><?php else: ?><a class="aurora-action" href="/register">加入社区 <span>↗</span></a><?php endif; ?></aside><?php // Front-end plugin sidebar blocks render at the bottom of this column. ?><?= extension_slot('sidebar.sections', ['path'=>$requestPath, 'user'=>$user]) ?></div></div>
   </main>
-  <?= extension_slot('footer.before', ['path'=>$requestPath, 'user'=>$user]) ?>
+   <?= extension_slot('page.footer.before', ['path'=>$requestPath, 'title'=>$title, 'user'=>$user, 'is_admin'=>false]) ?><?= extension_slot('footer.before', ['path'=>$requestPath, 'user'=>$user]) ?>
   <footer class="aurora-footer"><span><?= e($c['site'] ?? 'LiteBBS') ?></span><span>保持好奇，认真交流。</span></footer>
   <?= extension_slot('body.end', ['path'=>$requestPath, 'user'=>$user]) ?>
   <?= extension_javascripts($requestPath) ?>
