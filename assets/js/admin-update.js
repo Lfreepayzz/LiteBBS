@@ -17,7 +17,7 @@
             progress.hidden = state !== 'busy';
         }
 
-        function renderUpdateFiles(names) {
+        function renderUpdateFiles(names, downloaded) {
             var details = document.createElement('details');
             details.className = 'update-file-list';
             details.open = true;
@@ -45,7 +45,8 @@
             var button = document.createElement('button');
             button.className = 'primary';
             button.type = 'submit';
-            button.textContent = '下载并准备更新';
+            button.textContent = downloaded ? '当前版本已下载，等待部署安装' : '下载更新包';
+            button.disabled = downloaded;
             form.append(token, action, button);
             filePanel.replaceChildren(details, form);
         }
@@ -77,8 +78,10 @@
                         setStatus('success', '未发现需要更新的程序文件' + revision + '。');
                         return;
                     }
-                    renderUpdateFiles(data.files);
-                    setStatus('available', '发现 ' + data.files.length + ' 个有差异的文件' + revision + '。');
+                    renderUpdateFiles(data.files, data.downloaded === true);
+                    setStatus(data.downloaded === true ? 'success' : 'available', data.downloaded === true
+                        ? '已下载当前版本更新包，但程序文件尚未部署，因此仍有 ' + data.files.length + ' 个差异' + revision + '。'
+                        : '发现 ' + data.files.length + ' 个有差异的文件' + revision + '。');
                 })
                 .catch(function (error) {
                     setStatus('error', error && error.message ? error.message : '检查更新失败。');
