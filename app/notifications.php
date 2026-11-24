@@ -11,6 +11,8 @@ function process_notification_outbox(int $limit = 1): int {
         try{
             $event=h('SELECT id,topic_id,post_id,actor_id,fanout_cursor FROM notification_outbox WHERE processed_at IS NULL ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
             if(!$event){$db->commit();break;}
+            $visible = h('SELECT 1 FROM posts p JOIN topics t ON t.id=p.topic_id JOIN categories c ON c.id=t.category_id WHERE p.id=? AND p.topic_id=? AND p.status="normal" AND t.status="normal" AND c.is_visible=1 FOR UPDATE', [(int)$event['post_id'], (int)$event['topic_id']])->fetchColumn();
+            if (!$visible) { h('UPDATE notification_outbox SET processed_at=UTC_TIMESTAMP(6),pending_topic_id=NULL WHERE id=?', [(int)$event['id']]); $db->commit(); $batches++; continue; }
             h('UPDATE notification_outbox SET pending_topic_id=NULL WHERE id=?',[(int)$event['id']]);
             // Participants are maintained on writes, so a hot topic never rescans its posts.
             // The cursor is a user ID so batches remain deterministic across workers.

@@ -13,7 +13,7 @@
       if (note) {
         note.hidden = false;
         note.querySelector('strong').textContent = `回复 ${floor} 楼`;
-        note.querySelector('blockquote').textContent = post?.querySelector('[data-reply-content]')?.textContent?.trim() || '';
+        note.querySelector('blockquote').textContent = post?.querySelector('.body')?.textContent?.trim() || '';
       }
       composer.scrollIntoView({ behavior: 'smooth', block: 'start' });
       textarea.focus({ preventScroll: true });

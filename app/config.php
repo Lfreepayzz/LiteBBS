@@ -7,10 +7,13 @@ function config_directory(): string
     if ($dir !== null) return $dir;
     $configured = getenv('LITEBBS_PRIVATE_DIR');
     if ($configured !== false && $configured !== '') {
-        if ($configured[0] !== '/' || $configured === '/' || strpos($configured, "\0") !== false) {
+        $isAbsolute = $configured[0] === '/'
+            || preg_match('~^[A-Za-z]:[\\\\/]~', $configured) === 1
+            || str_starts_with($configured, '\\\\');
+        if (!$isAbsolute || $configured === '/' || strpos($configured, "\0") !== false) {
             throw new RuntimeException('LITEBBS_PRIVATE_DIR 必须是绝对目录');
         }
-        $dir = rtrim($configured, '/');
+        $dir = rtrim($configured, '/\\');
     } else {
         // This follows the application directory, including subdirectory deployments.
         $dir = dirname(__DIR__).'/private';

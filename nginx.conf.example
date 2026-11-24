@@ -19,7 +19,7 @@ server {
 server {
     listen 443 ssl http2 default_server;
     server_name forum.example.com;
-    # Replace this hostname, certificate paths, and installer address before deployment.
+    # Replace this hostname and certificate paths before deployment.
     ssl_certificate /etc/letsencrypt/live/forum.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/forum.example.com/privkey.pem;
     if ($host != forum.example.com) { return 444; }
@@ -55,6 +55,7 @@ server {
     location = /install.php {
         include fastcgi_params;
         fastcgi_param HTTPS on;
+        fastcgi_param HTTP_AUTHORIZATION $http_authorization;
         fastcgi_param DOCUMENT_ROOT $realpath_root;
         fastcgi_param SCRIPT_NAME /install.php;
         fastcgi_param PATH_INFO "";

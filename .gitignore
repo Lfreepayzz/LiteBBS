@@ -1,1 +1,11 @@
 /github-uploader-config.php
+/config.php
+/install.lock
+/private/config.php
+/private/install.lock
+/private/install-state.php
+/private/install.locking
+/cache/*
+!/cache/.gitkeep
+/uploads/*
+!/uploads/.gitkeep

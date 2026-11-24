@@ -1,3 +1,128 @@
-.admin-content:has(#program-update) #program-update-status{display:inline-flex;align-items:center;justify-content:center;margin:30px 0 12px}
-.admin-content:has(#program-update)>.database-upgrade{display:block;width:100%;margin:0 0 18px}.admin-content:has(#program-update)>.database-upgrade>h2,.admin-content:has(#program-update)>.database-upgrade>p{display:block;width:100%}.admin-content:has(#program-update)>.database-upgrade>p{padding-bottom:0;border-radius:0}.admin-content:has(#program-update)>.database-upgrade>p:last-of-type{padding-bottom:22px}.admin-content:has(#program-update)>.database-upgrade>form{display:block;margin:0;padding:0 30px 28px;border:0;background:linear-gradient(120deg,#17354b,#285b75);border-radius:0 0 10px 10px}.admin-content:has(#program-update)>.database-upgrade>form .primary{width:auto;min-height:40px}
-.extension-manage{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 13px;border:1px solid #bfd0de;border-radius:5px;background:#f7fafc;color:#1f4f78;font-size:12px;font-weight:700;line-height:1;white-space:nowrap;transition:border-color .16s ease,background .16s ease,color .16s ease,box-shadow .16s ease}.extension-manage:hover{border-color:#4f88b1;background:#eaf3f8;color:#173e60;box-shadow:0 1px 2px rgba(23,62,96,.1)}.extension-manage:focus-visible{outline:3px solid rgba(31,93,150,.24);outline-offset:2px}
+.program-update-page {
+    display: grid;
+    gap: 16px;
+    max-width: 880px;
+    overflow-wrap: anywhere;
+}
+
+.program-update-panel {
+    min-width: 0;
+    border: 1px solid var(--line);
+    background: var(--card);
+}
+
+.program-update-panel > h2 {
+    margin: 0;
+    padding: 11px 18px;
+    border-bottom: 1px solid var(--line);
+    font-size: 15px;
+    font-weight: 650;
+}
+
+.program-update-panel-body {
+    padding: 16px 18px;
+    border: 0;
+    border-radius: 0;
+}
+
+.program-update-panel-body > p {
+    margin: 0 0 14px;
+    color: var(--muted);
+}
+
+.program-update-panel-body > :last-child {
+    margin-bottom: 0;
+}
+
+.program-update-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 32px;
+    margin: 0 0 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+}
+
+.program-update-info > div { min-width: 0; }
+.program-update-info dt { color: var(--muted); font-size: 12px; }
+.program-update-info dd { margin: 2px 0 0; }
+
+.program-update-panel .program-update-notice,
+.program-update-page #program-update #program-update-status {
+    display: block;
+    margin: 0 0 14px;
+    padding: 9px 12px;
+    border-left: 4px solid var(--notice-color, #8c8f94);
+    border-radius: 0;
+    background: var(--soft);
+    color: var(--fg);
+    font-size: 13px;
+}
+
+.program-update-notice[data-state="busy"],
+.program-update-notice[data-state="available"] { --notice-color: var(--accent); }
+.program-update-notice[data-state="success"] { --notice-color: #008a20; }
+.program-update-notice[data-state="warning"] { --notice-color: #996800; }
+.program-update-notice[data-state="error"] { --notice-color: #d63638; }
+.program-update-panel-body > .program-update-notice:last-child { margin-bottom: 0; }
+
+.program-update-page #program-update #program-update-progress {
+    display: block;
+    width: 100%;
+    height: 6px;
+    margin-bottom: 14px;
+    accent-color: var(--accent);
+}
+
+.program-update-page #program-update #program-update-progress[hidden],
+.program-update-page #program-update #program-update-files:empty { display: none; }
+
+.program-update-page #program-update #program-update-files {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+}
+
+.program-update-page #program-update #program-update-files details {
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--soft);
+}
+
+.program-update-page #program-update #program-update-files summary {
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.program-update-page #program-update #program-update-files pre {
+    max-height: 16rem;
+    overflow: auto;
+    margin: 0;
+    padding: 10px 12px;
+    border-top: 1px solid var(--line);
+    background: var(--card);
+    font: 12px/1.65 ui-monospace, Consolas, monospace;
+    white-space: pre-wrap;
+}
+
+.program-update-page #program-update #program-update-files form { margin: 0; }
+.program-update-page #program-update #program-update-files details + form { margin-top: 12px; }
+.program-update-page #program-update #program-update-files #program-update-apply {
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.program-update-page .primary { min-height: 40px; }
+.program-update-page .primary:disabled { opacity: .65; cursor: wait; }
+.program-update-page .database-upgrade-form .primary:disabled { cursor: not-allowed; }
+
+@media (max-width: 480px) {
+    .program-update-panel > h2,
+    .program-update-panel-body { padding-inline: 12px; }
+
+    .program-update-info { display: grid; gap: 8px; }
+    .program-update-page .primary { width: 100%; }
+}

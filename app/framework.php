@@ -13,6 +13,7 @@ final class Request {
     public array $query;
     public array $post;
     public array $files;
+    public array $cookies;
     public array $server;
     public array $headers;
 
@@ -22,6 +23,7 @@ final class Request {
         array $query,
         array $post,
         array $files,
+        array $cookies,
         array $server,
         array $headers
     ) {
@@ -30,6 +32,7 @@ final class Request {
         $this->query = $query;
         $this->post = $post;
         $this->files = $files;
+        $this->cookies = $cookies;
         $this->server = $server;
         $this->headers = $headers;
     }
@@ -44,6 +47,7 @@ final class Request {
             $_GET,
             $_POST,
             $_FILES,
+            $_COOKIE,
             $_SERVER,
             is_array($headers) ? $headers : []
         );
@@ -57,6 +61,7 @@ final class Request {
             'query'=>$this->query,
             'post'=>$this->post,
             'files'=>$this->files,
+            'cookies'=>$this->cookies,
             'server'=>$this->server,
             'headers'=>$this->headers,
             'user'=>$user,
@@ -75,6 +80,7 @@ final class Request {
 
 final class Response {
     private array $headers = [];
+    private ?\Closure $stream = null;
     public string $body;
     public int $status;
 
@@ -97,12 +103,18 @@ final class Response {
         return $this->header('Content-Type', 'application/json; charset=utf-8');
     }
 
+    public function stream(callable $stream): self {
+        $this->stream = \Closure::fromCallable($stream);
+        return $this;
+    }
+
     public function headers(): array { return $this->headers; }
 
     public function send(): void {
         http_response_code($this->status);
         foreach ($this->headers as $name=>$value) header($name.': '.$value, true);
-        echo $this->body;
+        if ($this->stream !== null) ($this->stream)();
+        else echo $this->body;
     }
 }
 
@@ -125,52 +137,78 @@ final class Container {
     }
 }
 
-final class Router {
+interface Middleware {
+    public function process(Request $request, callable $next, Container $container): ?Response;
+}
+
+final class Router
+{
     private array $routes = [];
 
-    public function add(string|array $methods, string $pattern, callable $handler): self {
+    public function add(string|array $methods, string $pattern, callable $handler): self
+    {
         $methods = array_map('strtoupper', (array)$methods);
         $this->routes[] = [$methods, $pattern, $handler];
         return $this;
     }
 
-    public function dispatch(Request $request, Container $container): ?Response {
+    public function dispatch(Request $request, Container $container): ?Response
+    {
         $allowed = [];
         foreach ($this->routes as [$methods, $pattern, $handler]) {
-            if (!preg_match($pattern, $request->path, $matches)) continue;
-            if (!in_array($request->method, $methods, true) && !in_array('*', $methods, true)) { $allowed = array_merge($allowed, $methods); continue; }
+            if (!preg_match($pattern, $request->path, $matches)) {
+                continue;
+            }
+            if (!in_array($request->method, $methods, true) && !in_array('*', $methods, true)) {
+                $allowed = array_merge($allowed, $methods);
+                continue;
+            }
             $params = [];
-            foreach ($matches as $key=>$value) if (is_string($key)) $params[$key] = $value;
+            foreach ($matches as $key => $value) {
+                if (is_string($key)) {
+                    $params[$key] = $value;
+                }
+            }
             $response = $handler($request, $container, $params);
-            if ($response instanceof Response) return $response;
-            if (is_string($response)) return new Response($response);
+            if ($response instanceof Response) {
+                return $response;
+            }
+            if (is_string($response)) {
+                return new Response($response);
+            }
             return null;
         }
-        return $allowed ? (new Response('Method Not Allowed', 405))->header('Allow', implode(', ', array_unique($allowed))) : null;
+        return $allowed
+            ? (new Response('Method Not Allowed', 405))->header('Allow', implode(', ', array_unique($allowed)))
+            : null;
     }
 }
 
-final class Kernel {
+final class Kernel
+{
     private array $middleware = [];
     public Container $container;
     public Router $router;
 
-    public function __construct(?Container $container = null, ?Router $router = null) {
+    public function __construct(?Container $container = null, ?Router $router = null)
+    {
         $this->container = $container ?: new Container();
         $this->router = $router ?: new Router();
     }
 
-    public function middleware(callable $middleware): self {
+    public function middleware(Middleware $middleware): self
+    {
         $this->middleware[] = $middleware;
         return $this;
     }
 
-    public function handle(Request $request, ?callable $fallback = null): ?Response {
+    public function handle(Request $request, ?callable $fallback = null): ?Response
+    {
         $destination = fn(Request $request): ?Response => $this->router->dispatch($request, $this->container)
             ?? ($fallback ? $fallback($request) : null);
         foreach (array_reverse($this->middleware) as $middleware) {
             $next = $destination;
-            $destination = fn(Request $request): ?Response => $middleware($request, $next, $this->container);
+            $destination = fn(Request $request): ?Response => $middleware->process($request, $next, $this->container);
         }
         try {
             return $destination($request);

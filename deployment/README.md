@@ -1,13 +1,13 @@
 # Production Deployment
 
-LiteBBS requires PHP 8.1 or newer, MySQL 8.0 or newer, and the PHP extensions
+LiteBBS requires PHP 8.1 or newer, MySQL 8.0 or newer (or MariaDB 10.6 or newer), and the PHP extensions
 `pdo_mysql`, `mbstring`, `json`, `fileinfo`, and `zip`. Redis with `ext-redis`
 is strongly recommended for shared cache, rate limiting, sessions, and cache
 stampede protection when more than one PHP-FPM worker or host serves traffic.
 
 For a complete Chinese Redis, PHP-FPM, OPcache, Nginx, X-Accel-Redirect,
 worker, validation, and troubleshooting guide, read
-`deployment/Redis-Nginx-Acceleration.md`.
+[Redis and Nginx deployment](Redis-Nginx-Acceleration.md).
 
 ## Capacity Baseline
 
@@ -23,18 +23,25 @@ worker, validation, and troubleshooting guide, read
    uploads, `private/`, `cache/`, `scripts/`, `app/`, and database files outside
    direct public access.
 5. After updating program files, sign in as an administrator and open
-    `/admin/extensions`. If the page shows **数据库优化待升级**, use its
-    **立即升级数据库优化** button and wait for the redirect before restarting
-    workers. Do not run `scripts/migrate.php` as part of every normal production
-    deployment; the existing application upgrade flow remains unchanged.
-6. This release adds queue and cleanup indexes through the backward-compatible
-   `3.7.0-queue-cleanup-indexes` maintenance migration. Run
-   `php scripts/migrate.php` once during a low-traffic maintenance window before
-   scaling workers. It only adds
-   indexes and migration records; it does not change plugin tables, plugin
-   registrations, theme directories, or the online update program.
+   `/admin/extensions`. If the database status reports pending optimization,
+   use the offered database upgrade action and wait for it to finish before
+   restarting workers. This action applies the database performance migrations
+   listed on that page.
+6. `php scripts/migrate.php` is a separate CLI upgrade path for the complete
+   schema migration set, including migrations that are not part of the
+   administration-page performance upgrade. Run it when the release notes or
+   deployment procedure require it, preferably during a low-traffic
+   maintenance window. It is not necessary to run it on every deployment when
+   no schema upgrade is pending. Back up the database first and use a CLI PHP
+   version and configuration compatible with PHP-FPM.
 
-## Workers And Monitoring
+## Trusted Plugins
+
+PHP plugins execute as trusted code inside PHP-FPM and worker processes.
+Administrators can install and enable plugins from the admin panel after
+reviewing their PHP code. Run plugin workers with the same least-privilege
+filesystem and database access as PHP-FPM. The standalone CLI migration script
+requires `LITEBBS_ALLOW_TRUSTED_PLUGINS=1` in its own process environment.
 
 Run the notification, generic outbox, extension, cleanup, and topic-view
 workers under a service manager. Only one scheduled cleanup worker is needed;

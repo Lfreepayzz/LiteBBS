@@ -93,13 +93,16 @@ function friend_links_admin_page(Request $request): array
             $link = $id > 0 ? h('SELECT id,status,url FROM plg_friend_links_links WHERE id=?', [$id])->fetch() : false;
             if (!$link) fail(404, '友情链接不存在。');
             if ($action === 'approve') {
-                if ((string)$link['status'] !== 'pending') fail(409, '该友情链接不是待审核状态。');
-                h('UPDATE plg_friend_links_links SET status="active",verified_at=UTC_TIMESTAMP(6),last_checked_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE id=?', [$id]);
+                $updated = h('UPDATE plg_friend_links_links SET status="active",verified_at=UTC_TIMESTAMP(6),last_checked_at=UTC_TIMESTAMP(6),updated_at=UTC_TIMESTAMP(6) WHERE id=? AND status="pending"', [$id]);
+                if ($updated->rowCount() !== 1) fail(409, '该友情链接不是待审核状态。');
                 friend_links_invalidate_sidebar();
                 audit('friend_links.confirmed', 'plugin_friend_link', $id, ['url' => $link['url']]);
             } elseif ($action === 'toggle') {
-                $status = (string)$link['status'] === 'active' ? 'disabled' : 'active';
-                h('UPDATE plg_friend_links_links SET status=?,updated_at=UTC_TIMESTAMP(6) WHERE id=?', [$status, $id]);
+                $previous = (string)$link['status'];
+                if ($previous === 'pending') fail(409, '请先核验互链，再确认并启用。');
+                $status = $previous === 'active' ? 'disabled' : 'active';
+                $updated = h('UPDATE plg_friend_links_links SET status=?,updated_at=UTC_TIMESTAMP(6) WHERE id=? AND status=?', [$status, $id, $previous]);
+                if ($updated->rowCount() !== 1) fail(409, '友情链接状态已变化，请刷新后重试。');
                 friend_links_invalidate_sidebar();
                 audit('friend_links.status_changed', 'plugin_friend_link', $id, ['status' => $status, 'url' => $link['url']]);
             } else {
@@ -127,14 +130,21 @@ function friend_links_admin_page(Request $request): array
         if ((string)$link['description'] !== '') $body .= '<p>'.e($link['description']).'</p>';
         if ((string)($link['source_url'] ?? '') !== '') $body .= '<p class="friend-links-meta">互链验证页：<a href="'.e($link['source_url']).'" target="_blank" rel="noopener noreferrer">'.e($link['source_url']).'</a></p>';
         if ((string)($link['verified_at'] ?? '') !== '') $body .= '<p class="friend-links-meta">最近验证：'.e((string)$link['last_checked_at']).'</p>';
-        $body .= '</div><div class="friend-links-admin-actions">'.($pending ? '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="approve"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="primary friend-links-action-approve" type="submit">确认并启用</button></form>' : '').'<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="friend-links-action-toggle" type="submit">'.($active ? '停用' : '启用').'</button></form><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="'.(int)$link['id'].'"><button class="friend-links-action-delete" type="submit">删除</button></form></div></article>';
+        $fields = '<input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="id" value="'.(int)$link['id'].'">';
+        $body .= '</div><div class="friend-links-admin-actions">';
+        if ($pending) {
+            $body .= '<form method="post">'.$fields.'<button class="primary friend-links-action-approve" name="action" value="approve" type="submit">确认并启用</button></form>';
+        } else {
+            $body .= '<form method="post">'.$fields.'<button class="friend-links-action-toggle" name="action" value="toggle" type="submit">'.($active ? '停用' : '启用').'</button></form>';
+        }
+        $body .= '<form method="post">'.$fields.'<button class="friend-links-action-delete" name="action" value="delete" type="submit">删除</button></form></div></article>';
     }
     return ['title' => '友情链接管理', 'body' => $body.'</div></section></section></section>'];
 }
 
 function friend_links_invalidate_sidebar(): void
 {
-    invalidate('plugin:friend-links:sidebar');
+    extension_invalidate('plugin:friend-links:sidebar');
 }
 
 function friend_links_normalize_url(string $value): ?string

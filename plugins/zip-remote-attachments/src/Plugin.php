@@ -86,8 +86,6 @@ function zip_attachment_create(array $event): void
     if (!is_array($prepared)) return;
     $storage = null;
     $storedPath = null;
-    $db = db();
-    $db->beginTransaction();
     try {
         if ($prepared['kind'] === 'upload') {
             // Keep the quota check and record insertion under the same user-row
@@ -100,9 +98,7 @@ function zip_attachment_create(array $event): void
             if (!move_uploaded_file((string)$prepared['tmp_name'], $storedPath)) fail(500, 'ZIP 文件保存失败');
         }
         h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6))', [(int)$event['post_id'], (int)$event['user']['id'], $prepared['kind'], $storage, $prepared['remote'] ?: null, $prepared['name'], $prepared['size'], $prepared['hash'], $prepared['mode'], $prepared['mode'] === 'points' ? $prepared['points'] : 0]);
-        $db->commit();
     } catch (Throwable $error) {
-        if ($db->inTransaction()) $db->rollBack();
         if ($storedPath !== null) @unlink($storedPath);
         throw $error;
     }
@@ -135,14 +131,13 @@ function zip_attachment_update(array $event): void
 {
     $postId = (int)($event['post_id'] ?? 0);
     if ($postId < 1) return;
-    $remoteInput = filter_input(INPUT_POST, 'plugin_remote_attachment', FILTER_UNSAFE_RAW);
-    $removeInput = filter_input(INPUT_POST, 'plugin_attachment_remove', FILTER_UNSAFE_RAW);
-    $modeInput = filter_input(INPUT_POST, 'plugin_attachment_access', FILTER_UNSAFE_RAW);
-    $pointsInput = filter_input(INPUT_POST, 'plugin_attachment_points', FILTER_UNSAFE_RAW);
+    $input = $event['post'] ?? [];
+    $remoteInput = $input['plugin_remote_attachment'] ?? null;
+    $removeInput = $input['plugin_attachment_remove'] ?? null;
+    $modeInput = $input['plugin_attachment_access'] ?? null;
+    $pointsInput = $input['plugin_attachment_points'] ?? null;
     if ($remoteInput === null && $removeInput === null && $modeInput === null && $pointsInput === null) return;
 
-    $db=db();$db->beginTransaction();
-    try {
     $file = h('SELECT * FROM plg_zip_remote_attachments_files WHERE post_id=? AND status="active" ORDER BY id LIMIT 1 FOR UPDATE', [$postId])->fetch();
     $remote = is_string($remoteInput) ? trim($remoteInput) : '';
     $remove = is_string($removeInput) && $removeInput === '1';
@@ -156,8 +151,8 @@ function zip_attachment_update(array $event): void
         h('UPDATE plg_zip_remote_attachments_files SET status="removed" WHERE id=?', [(int)$file['id']]);
         $file = null;
     } elseif ($file) {
-        if ($mode !== (string)$file['access_mode'] || ($mode === 'points' && $points !== (int)$file['point_cost'])) {
-            h('DELETE FROM plg_zip_remote_attachments_grants WHERE attachment_id=?', [(int)$file['id']]);
+        if ($mode !== (string)$file['access_mode']) {
+            h('DELETE FROM plg_zip_remote_attachments_grants WHERE attachment_id=? AND grant_kind="reply"', [(int)$file['id']]);
         }
         h('UPDATE plg_zip_remote_attachments_files SET access_mode=?,point_cost=? WHERE id=?', [$mode,$mode==='points'?$points:0,(int)$file['id']]);
     }
@@ -166,11 +161,6 @@ function zip_attachment_update(array $event): void
         $ownerId = (int)h('SELECT user_id FROM posts WHERE id=? AND status="normal"', [$postId])->fetchColumn();
         if ($ownerId < 1) fail(404, '帖子不存在');
         h('INSERT INTO plg_zip_remote_attachments_files(post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,created_at) VALUES(?,? ,"remote",NULL,?,?,NULL,NULL,?,?,UTC_TIMESTAMP(6))', [$postId,$ownerId,$remote,$name,$mode,$mode==='points'?$points:0]);
-    }
-    $db->commit();
-    } catch (Throwable $error) {
-        if ($db->inTransaction()) $db->rollBack();
-        throw $error;
     }
 }
 
@@ -203,14 +193,26 @@ function zip_attachment_download(int $id): \LiteBBS\Framework\Response
     if ($file['source_kind'] === 'remote') {
         $host = (string)(parse_url((string)$file['remote_url'], PHP_URL_HOST) ?: '');
         $body = '<section class="plugin-attachments"><h1>即将离开本站</h1><p>该附件托管在外部网站 <strong>'.e($host).'</strong>。请确认该来源可信后继续下载。</p><form method="post" action="/attachments/external-download/'.$id.'"><input type="hidden" name="csrf" value="'.e(csrf()).'"><button class="attachment-download">继续前往外部下载</button></form></section>';
-        return new \LiteBBS\Framework\Response($body);
+        ob_start();
+        try {
+            page('即将离开本站', $body);
+            return new \LiteBBS\Framework\Response((string)ob_get_contents());
+        } finally {
+            ob_end_clean();
+        }
     }
     $path = dirname(__DIR__, 3).'/uploads/plugin-zip/'.basename((string)$file['storage_name']);
     if (!is_file($path)) fail(404, '附件文件不存在');
     $downloadName=rawurlencode((string)$file['original_name']);
     if (getenv('LITEBBS_X_ACCEL_REDIRECT') === '1') return (new \LiteBBS\Framework\Response(''))->header('Content-Type','application/zip')->header('Cache-Control','private, no-store')->header('Pragma','no-cache')->header('X-Content-Type-Options','nosniff')->header('Content-Disposition',"attachment; filename*=UTF-8''".$downloadName)->header('X-Accel-Redirect','/__litebbs-uploads/plugin-zip/'.rawurlencode(basename((string)$file['storage_name'])));
-    header('Content-Type: application/zip'); header('Cache-Control: private, no-store'); header('Pragma: no-cache'); header('X-Content-Type-Options: nosniff'); header("Content-Disposition: attachment; filename*=UTF-8''".$downloadName); header('Content-Length: '.filesize($path)); readfile($path);
-    return new \LiteBBS\Framework\Response('');
+    return (new \LiteBBS\Framework\Response())
+        ->header('Content-Type', 'application/zip')
+        ->header('Cache-Control', 'private, no-store')
+        ->header('Pragma', 'no-cache')
+        ->header('X-Content-Type-Options', 'nosniff')
+        ->header('Content-Disposition', "attachment; filename*=UTF-8''".$downloadName)
+        ->header('Content-Length', (string)filesize($path))
+        ->stream(static function () use ($path): void { readfile($path); });
 }
 
 function zip_attachment_external_download(int $id): \LiteBBS\Framework\Response
@@ -253,21 +255,33 @@ function zip_attachment_validate_archive(string $path, int $compressedBytes): vo
 
 function zip_attachment_remote_url_valid(string $url): bool
 {
-    if (preg_match('/[\x00-\x20\\\\]/', $url)) return false;
+    if (strlen($url) > 2048 || preg_match('/[\x00-\x20\\\\]/', $url)) return false;
     $parts = parse_url($url);
     if (!is_array($parts) || strtolower((string)($parts['scheme'] ?? '')) !== 'https' || empty($parts['host']) || isset($parts['user']) || isset($parts['pass']) || !preg_match('/\.zip$/i', (string)($parts['path'] ?? ''))) return false;
+    if (strlen(basename((string)$parts['path'])) > 255 || request_url_parts($url) === null) return false;
     $host = strtolower(rtrim((string)$parts['host'], '.'));
     if ($host === '' || $host === 'localhost' || str_ends_with($host, '.localhost') || str_ends_with($host, '.local') || str_ends_with($host, '.internal')) return false;
     if (filter_var($host, FILTER_VALIDATE_IP)) return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
     return (bool)preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i', $host);
 }
 
+function zip_attachment_visible_file(int $id, bool $lock = false): array
+{
+    $file = h('SELECT f.*,p.topic_id FROM plg_zip_remote_attachments_files f JOIN posts p ON p.id=f.post_id JOIN topics t ON t.id=p.topic_id JOIN categories c ON c.id=t.category_id WHERE f.id=? AND f.status="active" AND p.status="normal" AND t.status="normal" AND c.is_visible=1'.($lock ? ' FOR UPDATE' : ''), [$id])->fetch();
+    if (!$file) fail(404, '附件不存在');
+    return $file;
+}
+
+function zip_attachment_has_access(array $file, array $viewer): bool
+{
+    if (($viewer['role'] ?? '') === 'admin' || (int)$viewer['id'] === (int)$file['user_id'] || $file['access_mode'] === 'login') return true;
+    return (bool)h('SELECT 1 FROM plg_zip_remote_attachments_grants WHERE user_id=? AND attachment_id=?', [(int)$viewer['id'], (int)$file['id']])->fetchColumn();
+}
+
 function zip_attachment_available_to(int $id, array $viewer): array
 {
-    $file = h('SELECT * FROM plg_zip_remote_attachments_files WHERE id=? AND status="active"', [$id])->fetch();
-    if (!$file) fail(404, '附件不存在');
-    $grant = (bool)h('SELECT 1 FROM plg_zip_remote_attachments_grants WHERE user_id=? AND attachment_id=?', [(int)$viewer['id'], $id])->fetchColumn();
-    if (!(($viewer['role'] ?? '') === 'admin' || (int)$viewer['id'] === (int)$file['user_id'] || $file['access_mode'] === 'login' || $grant)) fail(403, '无权下载附件');
+    $file = zip_attachment_visible_file($id);
+    if (!zip_attachment_has_access($file, $viewer)) fail(403, '无权下载附件');
     return $file;
 }
 
@@ -281,20 +295,37 @@ function zip_attachment_check_user_quota(int $userId, int $incomingBytes): void
 
 function zip_attachment_unlock(int $id): \LiteBBS\Framework\Response
 {
-    $viewer = current_user(); if (!$viewer) redirect('/login');
-    $file = h('SELECT f.*,p.topic_id FROM plg_zip_remote_attachments_files f JOIN posts p ON p.id=f.post_id WHERE f.id=? AND f.status="active"', [$id])->fetch();
-    if (!$file) fail(404, '附件不存在');
-    if ($file['access_mode'] === 'reply') {
-        $replied = (bool)h('SELECT 1 FROM posts WHERE topic_id=? AND user_id=? AND status="normal" AND id<>(SELECT MIN(id) FROM posts WHERE topic_id=? AND status="normal") LIMIT 1', [(int)$file['topic_id'], (int)$viewer['id'], (int)$file['topic_id']])->fetchColumn();
-        if (!$replied) fail(403, '回复主题后才能下载');
-        h('INSERT IGNORE INTO plg_zip_remote_attachments_grants(user_id,attachment_id,grant_kind,created_at) VALUES(?,?,"reply",UTC_TIMESTAMP(6))', [(int)$viewer['id'], $id]);
-    } elseif ($file['access_mode'] === 'points') {
-        $db = db(); $db->beginTransaction();
-        try {
-            $grant = (bool)h('SELECT 1 FROM plg_zip_remote_attachments_grants WHERE user_id=? AND attachment_id=? FOR UPDATE', [(int)$viewer['id'], $id])->fetchColumn();
-            if (!$grant) { $points = (int)h('SELECT points FROM users WHERE id=? FOR UPDATE', [(int)$viewer['id']])->fetchColumn(); if ($points < (int)$file['point_cost']) fail(403, '积分不足'); h('UPDATE users SET points=points-? WHERE id=?', [(int)$file['point_cost'], (int)$viewer['id']]); h('INSERT INTO point_ledger(user_id,delta,reason,ref_type,ref_id,event_key,created_at) VALUES(?,?,?,?,?,?,UTC_TIMESTAMP(6))', [(int)$viewer['id'], -(int)$file['point_cost'], '附件购买', 'plugin_attachment', $id, 'plugin-attachment-purchase-'.$viewer['id'].'-'.$id]); h('INSERT INTO plg_zip_remote_attachments_grants(user_id,attachment_id,grant_kind,created_at) VALUES(?,?,"purchase",UTC_TIMESTAMP(6))', [(int)$viewer['id'], $id]); }
-            $db->commit();
-        } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+    $viewer = current_user();
+    if (!$viewer) redirect('/login');
+    $userId = (int)$viewer['id'];
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $file = zip_attachment_visible_file($id, true);
+        if (!zip_attachment_has_access($file, $viewer)) {
+            $legacyKey = 'plugin-attachment-purchase-'.$userId.'-'.$id;
+            // Restore purchases whose grants were removed by older plugin versions.
+            $purchased = (bool)h('SELECT 1 FROM point_ledger WHERE event_key=? AND created_at>=?', [$legacyKey, $file['created_at']])->fetchColumn();
+            $grantKind = 'purchase';
+            if (!$purchased && $file['access_mode'] === 'reply') {
+                $topicId = (int)$file['topic_id'];
+                $replied = (bool)h('SELECT 1 FROM posts WHERE topic_id=? AND user_id=? AND status="normal" AND id<>(SELECT MIN(id) FROM posts WHERE topic_id=? AND status="normal") LIMIT 1', [$topicId, $userId, $topicId])->fetchColumn();
+                if (!$replied) fail(403, '回复主题后才能下载');
+                $grantKind = 'reply';
+            } elseif (!$purchased) {
+                $price = (int)$file['point_cost'];
+                $points = (int)h('SELECT points FROM users WHERE id=? FOR UPDATE', [$userId])->fetchColumn();
+                if ($points < $price) fail(403, '积分不足');
+                h('UPDATE users SET points=points-? WHERE id=?', [$price, $userId]);
+                $eventKey = 'attachment-purchase:'.hash('sha256', $legacyKey.'|'.$file['created_at']);
+                h('INSERT INTO point_ledger(user_id,delta,reason,ref_type,ref_id,event_key,created_at) VALUES(?,?,?,?,?,?,UTC_TIMESTAMP(6))', [$userId, -$price, '附件购买', 'plugin_attachment', $id, $eventKey]);
+            }
+            h('INSERT INTO plg_zip_remote_attachments_grants(user_id,attachment_id,grant_kind,created_at) VALUES(?,?,?,UTC_TIMESTAMP(6))', [$userId, $id, $grantKind]);
+        }
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
     }
     redirect('/attachments/download/'.$id);
 }

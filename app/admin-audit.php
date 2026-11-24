@@ -1,14 +1,20 @@
 <?php
 declare(strict_types=1);
 
+function handle_admin_audit(\LiteBBS\Framework\Request $request): void
+{
+$path = $request->path;
+$method = $request->method;
+$query = $request->query;
+$post = $request->post;
 if ($path !== '/admin/audit' || !in_array($method, ['GET', 'POST'], true)) return;
 $actor = admin();
 
 if ($method === 'POST') {
     require_post();
-    if ((string)($_POST['action'] ?? '') !== 'clear') fail(400, '操作无效');
-    if (empty($_POST['confirm_token'])) confirmation_page('确认清空审计日志', '将永久删除全部历史审计记录，仅保留本次清理操作作为追溯凭据。', 'audit.clear', ['action' => 'clear'], 'all');
-    require_confirmation('audit.clear', 'all', (string)$_POST['confirm_token']);
+    if ((string)($post['action'] ?? '') !== 'clear') fail(400, '操作无效');
+    if (empty($post['confirm_token'])) confirmation_page('确认清空审计日志', '将永久删除全部历史审计记录，仅保留本次清理操作作为追溯凭据。', 'audit.clear', ['action' => 'clear'], 'all');
+    require_confirmation('audit.clear', 'all', (string)$post['confirm_token']);
     $db = db();
     $db->beginTransaction();
     try {
@@ -22,7 +28,7 @@ if ($method === 'POST') {
     redirect('/admin/audit');
 }
 
-$before = max(0, (int)($_GET['before'] ?? 0));
+$before = max(0, (int)($query['before'] ?? 0));
 $stats = h('SELECT COUNT(*) AS total,MAX(created_at) AS latest_at FROM audit_logs')->fetch() ?: ['total' => 0, 'latest_at' => null];
 $sql = 'SELECT id,actor_id,action,target_type,target_id,metadata_json,created_at FROM audit_logs'.($before ? ' WHERE id<?' : '').' ORDER BY id DESC LIMIT 100';
 $rows = h($sql, $before ? [$before] : [])->fetchAll();
@@ -41,3 +47,4 @@ $body .= '</section>';
 if (count($rows) === 100) $body .= '<p class="audit-more"><a href="/admin/audit?before='.(int)end($rows)['id'].'">加载更早的记录</a></p>';
 page('审计日志', $body, '', false, true);
 return;
+}

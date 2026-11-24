@@ -2,142 +2,109 @@
     'use strict';
 
     function init() {
+        var update = document.getElementById('program-update');
+        var checkButton = document.getElementById('program-update-check');
+        var status = document.getElementById('program-update-status');
+        var progress = document.getElementById('program-update-progress');
+        var filePanel = document.getElementById('program-update-files');
+        var csrf = document.getElementById('program-update-csrf');
 
-    var checkButton = document.getElementById('program-update-check');
-    var status = document.getElementById('program-update-status');
-    var progress = document.getElementById('program-update-progress');
-    var filePanel = document.getElementById('program-update-files');
+        if (!update || !checkButton || !status || !progress || !filePanel || !csrf) return;
 
-    if (!checkButton || !status || !progress || !filePanel) return;
+        function setStatus(state, message) {
+            status.dataset.state = state;
+            status.textContent = message;
+            progress.hidden = state !== 'busy';
+        }
 
-    function matchStatusToCheckButton() {
-        var style = window.getComputedStyle(checkButton);
-        var properties = [
-            'backgroundColor', 'backgroundImage', 'border', 'borderRadius',
-            'boxShadow', 'color', 'fontFamily', 'fontSize', 'fontWeight',
-            'lineHeight', 'minHeight', 'padding'
-        ];
+        function renderUpdateFiles(names) {
+            var details = document.createElement('details');
+            details.className = 'update-file-list';
+            details.open = true;
 
-        properties.forEach(function (property) {
-            status.style[property] = style[property];
-        });
+            var summary = document.createElement('summary');
+            summary.textContent = '更新文件清单（' + names.length + ' 个）';
+            var list = document.createElement('pre');
+            list.textContent = names.join('\n');
+            details.append(summary, list);
 
-        status.style.width = status.textContent === '尚未检查。' ? checkButton.offsetWidth + 'px' : 'auto';
-    }
+            var form = document.createElement('form');
+            form.method = 'post';
+            form.id = 'program-update-download';
 
-    matchStatusToCheckButton();
+            var token = document.createElement('input');
+            token.type = 'hidden';
+            token.name = 'csrf';
+            token.value = csrf.value;
 
-    function csrfToken() {
-        var input = document.querySelector('#program-update input[name="csrf"], #program-update-csrf');
-        return input ? input.value : '';
-    }
+            var action = document.createElement('input');
+            action.type = 'hidden';
+            action.name = 'action';
+            action.value = 'download';
 
-    function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, function (character) {
-            return {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            }[character];
-        });
-    }
+            var button = document.createElement('button');
+            button.className = 'primary';
+            button.type = 'submit';
+            button.textContent = '下载并准备更新';
+            form.append(token, action, button);
+            filePanel.replaceChildren(details, form);
+        }
 
-    function setProgress(value) {
-        progress.hidden = false;
-        progress.removeAttribute('indeterminate');
-        progress.value = value;
-    }
+        function checkUpdates() {
+            checkButton.disabled = true;
+            setStatus('busy', '正在读取 GitHub 文件清单…');
 
-    function setBusy(button, busy) {
-        if (button) button.disabled = busy;
-    }
-
-    function showError(error) {
-        status.textContent = error && error.message ? error.message : '更新操作失败。';
-        matchStatusToCheckButton();
-        progress.value = 0;
-    }
-
-    function renderUpdateFiles(data) {
-        var names = Array.isArray(data.files) ? data.files : [];
-        var list = names.map(escapeHtml).join('\n');
-        var token = escapeHtml(csrfToken());
-
-        filePanel.innerHTML =
-            '<details class="update-file-list" open>' +
-                '<summary>更新文件清单（' + names.length + ' 个）</summary>' +
-                '<pre>' + list + '</pre>' +
-            '</details>' +
-            '<form method="post" id="program-update-download">' +
-                '<input type="hidden" name="csrf" value="' + token + '">' +
-                '<input type="hidden" name="action" value="download">' +
-                '<button class="primary" type="submit">下载并准备更新</button>' +
-            '</form>';
-    }
-
-    function checkUpdates() {
-        setBusy(checkButton, true);
-        setProgress(15);
-        status.textContent = '正在读取 GitHub 文件清单...';
-        matchStatusToCheckButton();
-
-        fetch('/admin/extensions?action=check', {
-            method: 'GET',
-            credentials: 'same-origin',
-            cache: 'no-store',
-            headers: {'Accept': 'application/json'}
-        })
-            .then(function (response) {
-                return response.json().then(function (data) {
-                    if (!response.ok || !data.ok) {
-                        throw new Error(data.error || '检查更新失败。');
+            fetch('/admin/extensions?action=check', {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {'Accept': 'application/json'}
+            })
+                .then(function (response) {
+                    return response.json().then(function (data) {
+                        if (!response.ok || !data || !data.ok) {
+                            throw new Error((data && data.error) || '检查更新失败。');
+                        }
+                        return data;
+                    }, function () {
+                        throw new Error('无法读取更新检查结果。');
+                    });
+                })
+                .then(function (data) {
+                    var revision = data.version ? '（GitHub 文件树 ' + String(data.version).slice(0, 12) + '）' : '';
+                    if (!Array.isArray(data.files) || data.files.length === 0) {
+                        filePanel.replaceChildren();
+                        setStatus('success', '未发现需要更新的程序文件' + revision + '。');
+                        return;
                     }
-                    return data;
+                    renderUpdateFiles(data.files);
+                    setStatus('available', '发现 ' + data.files.length + ' 个有差异的文件' + revision + '。');
+                })
+                .catch(function (error) {
+                    setStatus('error', error && error.message ? error.message : '检查更新失败。');
+                })
+                .finally(function () {
+                    checkButton.disabled = false;
                 });
-            })
-            .then(function (data) {
-                setProgress(35);
-                if (!Array.isArray(data.files) || data.files.length === 0) {
-                    status.textContent = '当前已是最新版本（' + String(data.version || '').slice(0, 12) + '）。';
-                    matchStatusToCheckButton();
-                    filePanel.innerHTML = '';
-                    return;
-                }
-                status.textContent = '发现 ' + data.files.length + ' 个更新文件，版本 ' + String(data.version || '').slice(0, 12) + '。';
-                matchStatusToCheckButton();
-                renderUpdateFiles(data);
-                setProgress(45);
-            })
-            .catch(showError)
-            .finally(function () {
-                setBusy(checkButton, false);
-            });
-    }
-
-    checkButton.addEventListener('click', checkUpdates);
-
-    document.addEventListener('submit', function (event) {
-        var form = event.target;
-        var button = form.querySelector('button[type="submit"], button');
-
-        if (form.id === 'program-update-download') {
-            setBusy(button, true);
-            setProgress(60);
-            status.textContent = '正在下载 GitHub 更新包，请不要关闭页面...';
-            matchStatusToCheckButton();
-            return;
         }
 
-        if (form.id === 'program-update-apply') {
-            setBusy(button, true);
-            progress.hidden = false;
-            progress.removeAttribute('value');
-            status.textContent = '正在覆盖文件，请不要关闭页面...';
-            matchStatusToCheckButton();
-        }
-    });
+        checkButton.addEventListener('click', checkUpdates);
+
+        update.addEventListener('submit', function (event) {
+            var form = event.target;
+            var message;
+            if (form.id === 'program-update-download') {
+                message = '正在下载 GitHub 更新包，请不要关闭页面…';
+            } else if (form.id === 'program-update-apply') {
+                message = '正在覆盖文件，请不要关闭页面…';
+            } else {
+                return;
+            }
+
+            var button = form.querySelector('button[type="submit"], button');
+            if (button) button.disabled = true;
+            setStatus('busy', message);
+        });
     }
 
     if (document.readyState === 'loading') {

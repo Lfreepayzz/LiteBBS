@@ -86,7 +86,7 @@ function extension_dependency_report(string $id, array $manifest, bool $requireE
     return ['ok'=>$errors === [], 'errors'=>$errors, 'integrations'=>$optional];
 }
 
-function extension_plugin_lifecycle(string $id, string $action, bool $preserveData = true): void
+function extension_plugin_lifecycle(string $id, string $action, bool $preserveData = true, bool $approvedByAdmin = false): void
 {
     if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id) || !in_array($action, ['install','upgrade','enable','disable','uninstall'], true)) throw new InvalidArgumentException('Invalid plugin lifecycle operation.');
     $directory = dirname(__DIR__).'/plugins/'.$id;
@@ -101,16 +101,16 @@ function extension_plugin_lifecycle(string $id, string $action, bool $preserveDa
     if ($action === 'install') {
         $report = extension_dependency_report($id, $manifest, false);
         if (!$report['ok']) throw new RuntimeException(implode('；', $report['errors']));
-        plugin_apply_migrations(db(), $id, $directory, $manifest, null, false);
+        plugin_apply_migrations(db(), $id, $directory, $manifest, enabledAfter: false, approvedByAdmin: $approvedByAdmin);
     } elseif ($action === 'upgrade') {
         if (!version_compare((string)$manifest['version'], (string)$record['version'], '>')) throw new RuntimeException('Upgrade version must be newer than the installed version.');
         $report = extension_dependency_report($id, $manifest, false);
         if (!$report['ok']) throw new RuntimeException(implode('；', $report['errors']));
-        plugin_apply_migrations(db(), $id, $directory, $manifest, null, (bool)$record['enabled']);
+        plugin_apply_migrations(db(), $id, $directory, $manifest, enabledAfter: (bool)$record['enabled'], approvedByAdmin: $approvedByAdmin);
     } elseif ($action === 'enable') {
         $report = extension_dependency_report($id, $manifest, true);
         if (!$report['ok']) throw new RuntimeException(implode('；', $report['errors']));
-        plugin_apply_migrations(db(), $id, $directory, $manifest, null, true);
+        plugin_apply_migrations(db(), $id, $directory, $manifest, enabledAfter: true, approvedByAdmin: $approvedByAdmin);
     } elseif ($action === 'disable') {
         $dependents = [];
         foreach (extension_enabled_plugins() as $plugin) {
@@ -123,7 +123,10 @@ function extension_plugin_lifecycle(string $id, string $action, bool $preserveDa
         plugin_set_enabled_state(db(), $id, false);
     } else {
         if ((bool)$record['enabled']) throw new RuntimeException('Uninstall requires the plugin to be disabled first.');
-        if (!$preserveData) extension_drop_plugin_tables($id);
+        if (!$preserveData) {
+            extension_drop_plugin_tables($id);
+            extension_remove_plugin_storage($id);
+        }
         h('DELETE FROM extension_jobs WHERE plugin_name=?', [$id]);
         h('DELETE FROM extension_job_failures WHERE plugin_name=?', [$id]);
         if (!$preserveData) h('DELETE FROM plugin_user_field_values WHERE plugin_name=?', [$id]);
@@ -143,12 +146,18 @@ function extension_drop_plugin_tables(string $id): void
     finally { h('SET FOREIGN_KEY_CHECKS=1'); }
 }
 
+function extension_remove_plugin_storage(string $id): void
+{
+    if ($id === 'zip-remote-attachments') remove_tree(dirname(__DIR__).'/uploads/plugin-zip');
+}
+
 function extension_purge_plugin(string $id): void
 {
     if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $id)) throw new InvalidArgumentException('Invalid plugin ID.');
     $record = h('SELECT enabled FROM plugins WHERE name=?', [$id])->fetch();
     if ($record && (bool)$record['enabled']) plugin_set_enabled_state(db(), $id, false);
     extension_drop_plugin_tables($id);
+    extension_remove_plugin_storage($id);
     h('DELETE FROM extension_jobs WHERE plugin_name=?', [$id]);
     h('DELETE FROM extension_job_failures WHERE plugin_name=?', [$id]);
     h('DELETE FROM plugin_user_field_values WHERE plugin_name=?', [$id]);
@@ -250,22 +259,68 @@ function extension_schedule_tasks(?int $timestamp=null): int
 
 function extension_process_jobs(int $limit=100): int
 {
-    extension_schedule_tasks();$done=0;$db=db();
-    for($i=0;$i<max(1,min(1000,$limit));$i++){
+    extension_schedule_tasks();
+    $done = 0;
+    $db = db();
+    for ($i = 0; $i < max(1, min(1000, $limit)); $i++) {
+        $lockAcquired = false;
         $db->beginTransaction();
         try {
             // Claim fresh jobs first so the common path uses the ready-queue index.
             // Expired leases are reclaimed only when no fresh work is available.
-            $job=h('SELECT id,plugin_name,task_name,idempotency_key,payload_json,attempts FROM extension_jobs WHERE completed_at IS NULL AND lease_until IS NULL AND available_at<=UTC_TIMESTAMP(6) ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
-            if(!$job)$job=h('SELECT id,plugin_name,task_name,idempotency_key,payload_json,attempts FROM extension_jobs WHERE completed_at IS NULL AND lease_until IS NOT NULL AND lease_until<=UTC_TIMESTAMP(6) AND available_at<=UTC_TIMESTAMP(6) ORDER BY lease_until,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
-            if(!$job){$db->commit();break;}
-            $key=$job['plugin_name'].'.'.$job['task_name'];$task=extension_registry()['tasks'][$key]??null;
-            if(!$task){h('UPDATE extension_jobs SET completed_at=UTC_TIMESTAMP(6),last_error=? WHERE id=?',['Task is not registered.',(int)$job['id']]);$db->commit();continue;}
-            $token=bin2hex(random_bytes(32));
-            h('UPDATE extension_jobs SET attempts=attempts+1,lease_token=?,lease_until=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL ? SECOND) WHERE id=?',[$token,$task['lease'],(int)$job['id']]);
-            $job['attempts']=(int)$job['attempts']+1;$db->commit();
-        } catch(Throwable $error) { if($db->inTransaction())$db->rollBack();throw $error; }
-        try{$payload=json_decode((string)$job['payload_json'],true,32,JSON_THROW_ON_ERROR);($task['handler'])($payload,(string)$job['idempotency_key']);if(h('UPDATE extension_jobs SET completed_at=UTC_TIMESTAMP(6),lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?',[(int)$job['id'],$token])->rowCount())$done++;}catch(Throwable $error){$attempt=(int)$job['attempts'];$message=text_slice($error->getMessage(),0,500);if($attempt>=$task['retries']){h('INSERT IGNORE INTO extension_job_failures(job_id,plugin_name,task_name,payload_json,attempts,last_error,failed_at) VALUES(?,?,?,?,?,?,UTC_TIMESTAMP(6))',[(int)$job['id'],$job['plugin_name'],$job['task_name'],$job['payload_json'],$attempt,$message]);h('UPDATE extension_jobs SET completed_at=UTC_TIMESTAMP(6),lease_token=NULL,lease_until=NULL,last_error=? WHERE id=? AND lease_token=?',[$message,(int)$job['id'],$token]);}else h('UPDATE extension_jobs SET available_at=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL LEAST(900,POW(2,attempts)) SECOND),lease_token=NULL,lease_until=NULL,last_error=? WHERE id=? AND lease_token=?',[$message,(int)$job['id'],$token]);}}
+            $job = h('SELECT id,plugin_name,task_name,idempotency_key,payload_json,attempts FROM extension_jobs WHERE completed_at IS NULL AND lease_until IS NULL AND available_at<=UTC_TIMESTAMP(6) ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
+            if (!$job) $job = h('SELECT id,plugin_name,task_name,idempotency_key,payload_json,attempts FROM extension_jobs WHERE completed_at IS NULL AND lease_until IS NOT NULL AND lease_until<=UTC_TIMESTAMP(6) AND available_at<=UTC_TIMESTAMP(6) ORDER BY lease_until,id LIMIT 1 FOR UPDATE SKIP LOCKED')->fetch();
+            if (!$job) { $db->commit(); break; }
+
+            $id = (string)$job['id'];
+            $key = (string)$job['idempotency_key'];
+            // Namespace the lock within MySQL's 64-character limit. Acquire it
+            // before replacing an expired lease that may still be in use.
+            $prefix = 'litebbs:plugin-job:';
+            $lockName = $prefix.substr(hash('sha256', $key), 0, 64 - strlen($prefix));
+            $lockResult = (string)h('SELECT GET_LOCK(?, 0)', [$lockName])->fetchColumn();
+            if ($lockResult === '0') {
+                h('UPDATE extension_jobs SET available_at=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL 5 SECOND) WHERE id=?', [$id]);
+                $db->commit();
+                continue;
+            }
+            if ($lockResult !== '1') throw new RuntimeException('Could not acquire plugin job advisory lock.');
+            $lockAcquired = true;
+
+            $task = extension_registry()['tasks'][$job['plugin_name'].'.'.$job['task_name']] ?? null;
+            if (!$task || !h('SELECT 1 FROM plugins WHERE name=? AND enabled=1', [$job['plugin_name']])->fetchColumn()) {
+                h('UPDATE extension_jobs SET completed_at=UTC_TIMESTAMP(6),lease_token=NULL,lease_until=NULL,last_error=? WHERE id=?', ['Task is not registered.', $id]);
+                $db->commit();
+                continue;
+            }
+            $token = bin2hex(random_bytes(32));
+            h('UPDATE extension_jobs SET attempts=attempts+1,lease_token=?,lease_until=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL ? SECOND) WHERE id=?', [$token, $task['lease'], $id]);
+            $attempt = (int)$job['attempts'] + 1;
+            $db->commit();
+
+            try {
+                $payload = json_decode((string)$job['payload_json'], true, 32, JSON_THROW_ON_ERROR);
+                ($task['handler'])($payload, $key);
+                if (h("UPDATE extension_jobs SET completed_at=UTC_TIMESTAMP(6),lease_token=NULL,lease_until=NULL,last_error='' WHERE id=? AND lease_token=?", [$id, $token])->rowCount() === 1) $done++;
+            } catch (Throwable $error) {
+                $message = text_slice($error->getMessage(), 0, 500);
+                if ($attempt >= $task['retries']) {
+                    $db->beginTransaction();
+                    if (h('UPDATE extension_jobs SET completed_at=UTC_TIMESTAMP(6),lease_token=NULL,lease_until=NULL,last_error=? WHERE id=? AND lease_token=?', [$message, $id, $token])->rowCount() === 1) {
+                        h('INSERT IGNORE INTO extension_job_failures(job_id,plugin_name,task_name,payload_json,attempts,last_error,failed_at) VALUES(?,?,?,?,?,?,UTC_TIMESTAMP(6))', [$id, $job['plugin_name'], $job['task_name'], $job['payload_json'], $attempt, $message]);
+                    }
+                    $db->commit();
+                } else {
+                    h('UPDATE extension_jobs SET available_at=DATE_ADD(UTC_TIMESTAMP(6),INTERVAL LEAST(900,POW(2,attempts)) SECOND),lease_token=NULL,lease_until=NULL,last_error=? WHERE id=? AND lease_token=?', [$message, $id, $token]);
+                }
+            }
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        } finally {
+            if ($lockAcquired) h('SELECT RELEASE_LOCK(?)', [$lockName]);
+        }
+    }
     return $done;
 }
 

@@ -1,37 +1,27 @@
 <?php
 declare(strict_types=1);
 
+function handle_admin_dashboard(\LiteBBS\Framework\Request $request): void
+{
+$path = $request->path;
+$method = $request->method;
+$query = $request->query;
+$post = $request->post;
 if ($path !== '/admin' || !in_array($method, ['GET', 'POST'], true)) return;
 
 $actor = admin();
-$cleanCacheLocks = static function (): int {
-    $removed = 0;
-    $cacheDir = dirname(__DIR__).'/cache';
-    if (!is_dir($cacheDir)) return 0;
-    foreach (new DirectoryIterator($cacheDir) as $file) {
-        if ($removed >= 200) break;
-        if (!$file->isFile() || $file->isLink() || !preg_match('/^(?:[a-f0-9]{64}\.cache(?:\.page)?|active-lock-[a-f0-9]{3,64})\.lock$/', $file->getFilename())) continue;
-        if ($file->getMTime() > time() - 172800) continue;
-        if (@unlink($file->getPathname())) $removed++;
-    }
-    return $removed;
-};
 if ($method === 'POST') {
     require_post();
-    $action = (string)($_POST['action'] ?? '');
-    $id = (int)($_POST['id'] ?? 0);
+    $action = (string)($post['action'] ?? '');
+    $id = (int)($post['id'] ?? 0);
     if ($action === 'pin' || $action === 'unpin') {
         moderate_topic($id, 'is_pinned', $action === 'pin' ? 1 : 0, $action);
     } elseif ($action === 'lock' || $action === 'unlock') {
         moderate_topic($id, 'is_locked', $action === 'lock' ? 1 : 0, $action);
     } elseif ($action === 'delete') {
-        if (empty($_POST['confirm_token'])) confirmation_page('确认永久删除','将永久删除主题、回复、修订和积分记录，此操作不可恢复。','topic.delete',['id'=>$id,'action'=>'delete'],(string)$id);
-        require_confirmation('topic.delete',(string)$id,(string)$_POST['confirm_token']);
+        if (empty($post['confirm_token'])) confirmation_page('确认永久删除','将永久删除主题、回复、修订和积分记录，此操作不可恢复。','topic.delete',['id'=>$id,'action'=>'delete'],(string)$id);
+        require_confirmation('topic.delete',(string)$id,(string)$post['confirm_token']);
         permanently_delete_topic($id);
-    } elseif ($action === 'cleanup_cache_locks') {
-        $removed = $cleanCacheLocks();
-        audit('cache.locks.cleaned', 'cache', null, ['removed'=>$removed]);
-        redirect('/admin?cache_locks_cleaned='.$removed);
     } else {
         fail(400, '操作无效');
     }
@@ -45,7 +35,7 @@ if (is_dir(dirname($maintenance)) && (!is_file($maintenance) || filemtime($maint
         if (flock($handle, LOCK_EX | LOCK_NB)) {
             clearstatcache(true, $maintenance);
             if (filemtime($maintenance) < time() - 86400) {
-                $cleanCacheLocks();
+                clean_old_cache_locks();
                 @touch($maintenance);
             }
             flock($handle, LOCK_UN);
@@ -82,9 +72,7 @@ foreach ($recent as $topic) {
     }
     $body .= '</div></article>';
 }
-$body .= '</section><section class="dashboard-links"><a href="/admin/users">用户管理</a><a href="/admin/categories">分区管理</a><a href="/admin/settings">站点设置</a><a href="/admin/reports">举报审核</a><a href="/admin/plugins">插件管理</a><a href="/admin/themes">模板管理</a><a href="/admin/market">扩展审核</a><a href="/admin/audit">审计日志</a></section>';
-$body .= '<section class="dashboard-section"><div class="dashboard-section-heading"><h2>缓存维护</h2></div>';
-if (isset($_GET['cache_locks_cleaned']) && is_string($_GET['cache_locks_cleaned']) && ctype_digit($_GET['cache_locks_cleaned'])) $body .= '<p>已清理 '.(int)$_GET['cache_locks_cleaned'].' 个旧缓存锁文件。文件较多时可再次清理。</p>';
-$body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="cleanup_cache_locks"><button type="submit">清理旧缓存锁</button></form></section>';
+$body .= '</section>';
 page('管理总览', $body);
 return;
+}

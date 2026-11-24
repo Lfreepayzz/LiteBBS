@@ -39,9 +39,9 @@ port 6379
 # 生成一个高强度随机密码，例如：openssl rand -base64 48
 requirepass REPLACE_WITH_A_LONG_RANDOM_PASSWORD
 
-# 缓存可以淘汰；不要使用 noeviction，否则满内存时写缓存会失败。
+# 仅淘汰有 TTL 的键，保留缓存版本键。
 maxmemory 256mb
-maxmemory-policy allkeys-lru
+maxmemory-policy volatile-lru
 
 # 不把 Redis 当作唯一业务数据源。开启轻量持久化用于意外重启恢复。
 appendonly yes
@@ -104,6 +104,7 @@ env[LITEBBS_X_ACCEL_REDIRECT] = 1
 规则：
 
 - `LITEBBS_REDIS_PREFIX` 必须在同一 Redis 实例中唯一。例如 `forum-prod`、`forum-stage`。
+- 多节点若要求 Redis 故障期间也立即下架，所有节点应使用同一份可原子更新的 `cache/` 目录，或在 Redis 故障后暂停向受影响节点分流，直至清理缓存并恢复服务。
 - 正式站点与测试站点不能共用 prefix。
 - `LITEBBS_REDIS_DATABASE` 可保留 `0`；不要把 database 编号当安全隔离。
 - `LITEBBS_DB_PERSISTENT` 默认不要开启。只有 MySQL 连接建立耗时明显、连接数有余量且压力测试稳定时再启用。
@@ -244,7 +245,7 @@ sudo install -d -o www-data -g www-data -m 0700 /var/lib/litebbs/private
 
 ## 7. 启动后台 Worker
 
-Web 请求不会同步处理通知、扩展异步事件、扩展任务或主题访问量落库。需要用 systemd timer、cron 或 Supervisor 定期运行：
+Web 请求不会同步处理通知、扩展异步事件、扩展任务或主题访问量落库。用 systemd timer、cron 或 Supervisor 定期调用以下一次性批处理命令：
 
 ```bash
 php /srv/litebbs/scripts/notifications-worker.php 100
@@ -254,6 +255,8 @@ php /srv/litebbs/scripts/flush-topic-views.php
 php /srv/litebbs/scripts/cleanup.php
 php /srv/litebbs/scripts/cleanup-attachments.php
 ```
+
+每次调用处理一批任务后退出；由 systemd timer、cron 或 Supervisor 按下表调度，不要把这些命令当作常驻循环进程。
 
 建议频率：
 
@@ -291,19 +294,20 @@ redis-cli -a 'REPLACE_WITH_A_LONG_RANDOM_PASSWORD' --scan --pattern 'litebbs-pro
 发布后先运行 `sudo nginx -t`，并用服务器上的 PHP CLI 对改动的 PHP 文件执行 `php -l`。标准 Nginx 示例对带 12 位资源版本号的静态 URL 使用一年 immutable 缓存；未版本化的资源只缓存一小时。宝塔和 Apache 示例统一采用一小时缓存。修改资源后应检查页面生成的 `?v=` 是否随之变化。
 
 ```bash
-curl -I https://forum.example.com/
-curl -I https://forum.example.com/c/1
-curl -I https://forum.example.com/t/1
+curl -sS -D - -o /dev/null https://forum.example.com/
+curl -sS -D - -o /dev/null https://forum.example.com/c/1
+curl -sS -D - -o /dev/null https://forum.example.com/t/1
 curl -I 'https://forum.example.com/templates/default/assets/theme.css?v=实际页面中的版本号'
 curl -I https://forum.example.com/assets/css/admin.css
 ```
 
-匿名首页和分区页应包含类似：
+首页、分区、主题和站点地图保留应用内部缓存。外部 HTTP 缓存应遵守：
 
 ```text
-Cache-Control: public, max-age=30, s-maxage=30, stale-while-revalidate=90
-Server-Timing: ...
+Cache-Control: private, no-store
 ```
+
+以上动态页面使用 GET 验证。排查耗时时可在 PHP-FPM 环境中临时设置 `LITEBBS_DEBUG_TIMING=1`，再检查响应中的 `Server-Timing`。
 
 登录页面、会员中心、私信页应为：
 
@@ -315,9 +319,9 @@ Cache-Control: private, no-store
 
 `Server-Timing` 中重点关注：
 
-- `total`：总处理时间。
+- `total`：从 PHP 入口开始到生成响应的耗时，包含启动和路由，不包含 PHP-FPM 排队、响应发送与网络传输。
 - `db`：建连时间；持续偏高时检查网络、持久连接策略和 MySQL。
-- `sql`：SQL 执行总耗时。
+- `sql`：PDO 预处理与执行的累计耗时，不含建连、后续结果读取和事务提交。
 - `queries`：每个请求的 SQL 数。
 - `dispatch`：PHP 路由、渲染、插件逻辑耗时。
 
@@ -348,6 +352,8 @@ export CATEGORY_ID='1'
 export HOT_TOPIC_ID='1'
 k6 run /srv/litebbs/scripts/load-test.js
 ```
+
+脚本分别统计首页、分区、主题和热帖。使用 `HOME_P95_MS`、`HOME_P99_MS` 等变量设置各路由预算。其余变量前缀为 `CATEGORY`、`TOPIC`、`HOT_TOPIC` 和 `SIGNED_IN_HOME`。测试登录态时传入测试账号的 `SESSION_COOKIE` 和与登录时相同的 `SESSION_USER_AGENT`。冷缓存测试需在隔离环境单独运行，记录缓存清理时点和回源量。
 
 初始验收目标：
 
@@ -415,7 +421,9 @@ sudo systemctl restart php8.2-fpm
 
 ### 缓存命中率低
 
-检查 CDN 或反代是否错误忽略/篡改 `Cache-Control`、`Vary: Cookie`。匿名首页和分区页不要添加无关全站 Cookie；本程序已把访客主题浏览 Cookie 限制在 `/t/` 路径，避免它打碎列表页缓存。
+检查应用文件缓存或 Redis 的命中情况。升级后清理 CDN 和反代先前缓存的动态响应，关闭覆盖源站 `no-store` 的规则。静态资源继续执行各自的缓存策略。
+
+缓存未命中时，应用只尝试一次取锁。未取得锁的请求直接回源，持锁请求负责写缓存。压测时应记录冷缓存的回源量、SQL 次数和 p95/p99。
 
 ## 发布顺序
 
@@ -430,6 +438,6 @@ sudo systemctl reload nginx
 
 1. 重启 PHP-FPM，使 OPcache 加载新代码。
 2. 以管理员登录 `/admin/extensions`。
-3. 出现“数据库优化待升级”时，点击“立即升级数据库优化”。
+3. 若数据库状态显示待升级，点击“立即升级数据库结构”。CLI 迁移的适用范围见 [生产部署指南](README.md#capacity-baseline)。
 4. 检查 worker 日志和 `Server-Timing`。
 5. 最后运行 k6 读压测，确认 p95、p99、错误率和队列年龄。

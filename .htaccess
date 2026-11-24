@@ -11,6 +11,9 @@ RedirectMatch 404 ^/market-packages/
 RewriteRule ^admin/?$ index.php [L]
 RewriteRule ^install/?$ install.php [L]
 RewriteRule ^install\.php$ - [L]
+<Files "install.php">
+ CGIPassAuth On
+</Files>
 RewriteRule ^assets/(?:css|js)/[A-Za-z0-9._-]+\.(?:css|js)$ - [L]
 RewriteRule ^assets/index\.svg$ - [L]
 <IfModule mod_headers.c>

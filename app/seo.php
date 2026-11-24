@@ -57,7 +57,6 @@ function seo_head(string $title, string $description, bool $indexable, string $c
     $canonicalPath = seo_normalize_path($canonical);
     if ($canonicalPath === '/' && trim((string)($seo['home_description'] ?? '')) !== '') $description = (string)$seo['home_description'];
     $indexable = $indexable && seo_indexing_enabled();
-    if ($canonicalPath === '/' && isset($_GET['cursor']) && theme_home_page_path((string)($site['theme'] ?? 'default')) === 'forum') $indexable = false;
     $summary = trim((string)preg_replace('/\s+/u', ' ', strip_tags($description)));
     $summary = text_slice($summary, 0, 220);
     $html = '<meta name="description" content="'.e($summary).'">'."\n";

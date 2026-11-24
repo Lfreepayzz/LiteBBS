@@ -1,12 +1,13 @@
 <?php
 declare(strict_types=1);
 
-require dirname(__DIR__).'/app/core.php';
-
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
     exit("CLI only\n");
 }
+require dirname(__DIR__).'/app/config.php';
+require dirname(__DIR__).'/app/core.php';
+if (!is_file(config_file())) exit("Private configuration is missing.\n");
 
 $sessions = 0; do { $count = h('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP(6) ORDER BY expires_at,id LIMIT 1000')->rowCount(); $sessions += $count; } while ($count === 1000);
 $limits = 0; do { $count = h('DELETE FROM rate_limits WHERE reset_at <= UTC_TIMESTAMP(6) ORDER BY reset_at,bucket LIMIT 1000')->rowCount(); $limits += $count; } while ($count === 1000);

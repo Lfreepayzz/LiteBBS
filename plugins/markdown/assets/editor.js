@@ -125,7 +125,7 @@
     addButton(toolbar, 'S', '删除线', () => insert(textarea, '~~', '~~', '删除文本'));
     addButton(toolbar, '</>', '行内代码', () => insert(textarea, '`', '`', '代码'));
     addButton(toolbar, '链', '插入链接', () => insert(textarea, '[', '](https://example.com)', '链接文字'));
-    addButton(toolbar, '图', '插入图片', () => insert(textarea, '![', '](https://example.com/image.jpg)', '图片说明'));
+    addButton(toolbar, '图', '插入站内图片（外站图片显示为链接）', () => insert(textarea, '![', '](/assets/index.svg)', '图片说明'));
     addButton(toolbar, '引', '引用', () => insert(textarea, '> ', '', '引用内容'));
     addButton(toolbar, '列', '无序列表', () => insert(textarea, '- ', '', '列表项目'));
     addButton(toolbar, '序', '有序列表', () => insert(textarea, '1. ', '', '列表项目'));

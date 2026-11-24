@@ -326,7 +326,7 @@ function markdown_plugin_table(array $headers, array $alignments, array $rows, a
     $headers = array_slice(array_pad($headers, $columns, ''), 0, $columns);
     $html = '<div class="markdown-table-wrap"><table><thead><tr>';
     foreach ($headers as $index => $header) {
-        $align = $alignments[$index] === '' ? '' : ' style="text-align:'.$alignments[$index].'"';
+        $align = $alignments[$index] === '' ? '' : ' class="markdown-align-'.$alignments[$index].'"';
         $html .= '<th'.$align.'>'.markdown_plugin_inline($header, $references, $footnotes, $usedFootnotes).'</th>';
     }
     $html .= '</tr></thead><tbody>';
@@ -334,7 +334,7 @@ function markdown_plugin_table(array $headers, array $alignments, array $rows, a
         $row = array_slice(array_pad($row, $columns, ''), 0, $columns);
         $html .= '<tr>';
         foreach ($row as $index => $cell) {
-            $align = $alignments[$index] === '' ? '' : ' style="text-align:'.$alignments[$index].'"';
+            $align = $alignments[$index] === '' ? '' : ' class="markdown-align-'.$alignments[$index].'"';
             $html .= '<td'.$align.'>'.markdown_plugin_inline($cell, $references, $footnotes, $usedFootnotes).'</td>';
         }
         $html .= '</tr>';
@@ -394,7 +394,7 @@ function markdown_plugin_inline(string $source, array $references, array $footno
                 $title = $titleValue === '' ? '' : ' title="'.e($titleValue).'"';
                 $label = $match[2];
                 $html = $image
-                    ? '<img src="'.e($url).'" alt="'.e(strip_tags(markdown_plugin_inline($label, $references, [], $usedFootnotes))).'"'.$title.' loading="lazy">'
+                    ? markdown_plugin_image($url, strip_tags(markdown_plugin_inline($label, $references, [], $usedFootnotes)), $title)
                     : '<a href="'.e($url).'"'.$title.' rel="nofollow noopener">'.markdown_plugin_inline($label, $references, $footnotes, $usedFootnotes).'</a>';
                 $text .= $stash($html);
                 $offset += strlen($match[0]);
@@ -409,7 +409,7 @@ function markdown_plugin_inline(string $source, array $references, array $footno
                 if ($url !== null) {
                     $title = $references[$key]['title'] === '' ? '' : ' title="'.e($references[$key]['title']).'"';
                     $html = $image
-                        ? '<img src="'.e($url).'" alt="'.e($match[2]).'"'.$title.' loading="lazy">'
+                        ? markdown_plugin_image($url, $match[2], $title)
                         : '<a href="'.e($url).'"'.$title.' rel="nofollow noopener">'.markdown_plugin_inline($match[2], $references, $footnotes, $usedFootnotes).'</a>';
                     $text .= $stash($html);
                     $offset += strlen($match[0]);
@@ -478,6 +478,14 @@ function markdown_plugin_image_url(string $url): ?string
     if ($safeUrl === null) return null;
     $parts = parse_url($safeUrl);
     return is_array($parts) && strtolower((string)($parts['scheme'] ?? '')) === 'mailto' ? null : $safeUrl;
+}
+
+function markdown_plugin_image(string $url, string $label, string $title): string
+{
+    if (preg_match('~^https?://~i', $url) && !same_request_origin($url, (string)(load_config()['url'] ?? ''))) {
+        return '<a href="'.e($url).'"'.$title.' rel="nofollow noopener noreferrer">'.e($label !== '' ? $label : $url).'</a>';
+    }
+    return '<img src="'.e($url).'" alt="'.e($label).'"'.$title.' loading="lazy">';
 }
 
 function markdown_plugin_reference_key(string $label): string

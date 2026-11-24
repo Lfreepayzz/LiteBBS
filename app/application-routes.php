@@ -3,49 +3,30 @@ declare(strict_types=1);
 
 function register_application_routes(\LiteBBS\Framework\Router $router): void
 {
-    $module = static function (string $file): callable {
-        return static function (\LiteBBS\Framework\Request $request) use ($file): \LiteBBS\Framework\Response {
-            $path = $request->path;
-            $method = $request->method;
-            ob_start();
-            try {
-                require __DIR__.'/'.$file;
-                return new \LiteBBS\Framework\Response((string)ob_get_clean(), http_response_code() ?: 200);
-            } catch (\LiteBBS\Framework\ResponseHalt $halt) {
-                ob_end_clean();
-                return $halt->response;
-            } catch (Throwable $error) {
-                ob_end_clean();
-                throw $error;
-            }
-        };
+    $handler = static function (string $file, string $function): callable {
+        return new \LiteBBS\Application\LegacyActionController($file, $function);
     };
 
-    $router->add(['GET', 'POST'], '~^/new$~', $module('plugin-topic.php'));
-    $router->add(['GET', 'POST'], '~^/(?:login|register|me)$~', $module('account-routes.php'));
-    $router->add('POST', '~^/logout$~', $module('account-routes.php'));
-    $router->add('GET', '~^/(?:search|u/[^/]+)$~', $module('account-routes.php'));
-    $router->add(['GET', 'POST'], '~^/admin/categories$~', $module('admin-categories.php'));
-    $router->add(['GET', 'POST'], '~^/admin/(?:market|extensions)$~', $module('market.php'));
-    $router->add(['GET', 'POST'], '~^/market(?:/index\.json|/submit)?$~', $module('market.php'));
-    $router->add('GET', '~^/market/package/[0-9]+$~', $module('market.php'));
-    $router->add(['GET', 'POST'], '~^/admin/(?:themes|plugins|users|settings|content|reports|audit)$~', static function (\LiteBBS\Framework\Request $request) use ($module): \LiteBBS\Framework\Response {
-        $files = [
-            '/admin/themes' => 'admin-extensions-manage.php',
-            '/admin/plugins' => 'admin-extensions-manage.php',
-            '/admin/users' => 'admin-users-settings.php',
-            '/admin/settings' => 'admin-users-settings.php',
-            '/admin/content' => 'admin-users-settings.php',
-            '/admin/reports' => 'admin-reports.php',
-            '/admin/audit' => 'admin-audit.php',
-        ];
-        return $module($files[$request->path])($request);
-    });
-    $router->add(['GET', 'POST'], '~^/messages$~', $module('messages.php'));
-    $router->add(['GET', 'POST'], '~^/avatar/upload$~', $module('community.php'));
-    $router->add('GET', '~^/avatar/[0-9]+$~', $module('community.php'));
-    $router->add('POST', '~^/(?:topic/[0-9]+/(?:bookmark|subscribe)|post/[0-9]+/(?:like|delete)|report|user/[0-9]+/(?:block|unblock))$~', $module('community.php'));
-    $router->add(['GET', 'POST'], '~^/p/[0-9]+/edit$~', $module('post-edit.php'));
-    $router->add('GET', '~^/(?:t/[0-9]+(?:-[^/]+)?|c/[0-9]+)$~', $module('read-pages.php'));
-    $router->add(['GET', 'POST'], '~^/admin$~', $module('admin-dashboard.php'));
+    $account = $handler('account-routes.php', 'handle_account_routes');
+    $router->add(['GET', 'POST'], '~^/new$~', $handler('plugin-topic.php', 'handle_topic_create'));
+    $router->add(['GET', 'POST'], '~^/(?:login|register|me)$~', $account);
+    $router->add('POST', '~^/logout$~', $account);
+    $router->add('GET', '~^/(?:search|u/[^/]+)$~', $account);
+    $router->add(['GET', 'POST'], '~^/admin/categories$~', $handler('admin-categories.php', 'handle_admin_categories'));
+    $market = $handler('market.php', 'handle_market');
+    $router->add(['GET', 'POST'], '~^/admin/(?:market|extensions)$~', $market);
+    $router->add(['GET', 'POST'], '~^/market(?:/index\.json|/submit)?$~', $market);
+    $router->add('GET', '~^/market/package/[0-9]+$~', $market);
+    $router->add(['GET', 'POST'], '~^/admin/(?:themes|plugins)$~', $handler('admin-extensions-manage.php', 'handle_admin_extensions_manage'));
+    $router->add(['GET', 'POST'], '~^/admin/(?:users|settings|content)$~', $handler('admin-users-settings.php', 'handle_admin_users_settings'));
+    $router->add(['GET', 'POST'], '~^/admin/reports$~', $handler('admin-reports.php', 'handle_admin_reports'));
+    $router->add(['GET', 'POST'], '~^/admin/audit$~', $handler('admin-audit.php', 'handle_admin_audit'));
+    $router->add(['GET', 'POST'], '~^/messages$~', $handler('messages.php', 'handle_messages'));
+    $community = $handler('community.php', 'handle_community_routes');
+    $router->add(['GET', 'POST'], '~^/avatar/upload$~', $community);
+    $router->add('GET', '~^/avatar/[0-9]+$~', $community);
+    $router->add('POST', '~^/(?:topic/[0-9]+/(?:bookmark|subscribe)|post/[0-9]+/(?:like|delete)|report|user/[0-9]+/(?:block|unblock))$~', $community);
+    $router->add(['GET', 'POST'], '~^/p/[0-9]+/edit$~', $handler('post-edit.php', 'handle_post_edit'));
+    $router->add('GET', '~^/(?:t/[0-9]+(?:-[^/]+)?|c/[0-9]+)$~', $handler('read-pages.php', 'handle_read_pages'));
+    $router->add(['GET', 'POST'], '~^/admin$~', $handler('admin-dashboard.php', 'handle_admin_dashboard'));
 }

@@ -4,16 +4,24 @@ require_once __DIR__.'/builtin-plugin-schema.php';
 require_once __DIR__.'/plugin-migrations.php';
 require_once __DIR__.'/extension-platform.php';
 
+function handle_admin_extensions_manage(\LiteBBS\Framework\Request $request): void
+{
+$path = $request->path;
+$method = $request->method;
+$query = $request->query;
+$post = $request->post;
 if (!in_array($path, ['/admin/themes', '/admin/plugins'], true) || !in_array($method, ['GET', 'POST'], true)) return;
 
 $actor = admin();
 $section = $path === '/admin/themes' ? 'themes' : 'plugins';
 $root = dirname(__DIR__);
 
-if ($section === 'plugins' && array_key_exists('plugin', $_GET)) {
-    $pluginId = (string)($_GET['plugin'] ?? '');
-    $pageName = (string)($_GET['page'] ?? '');
-    if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $pluginId) || !preg_match('/^[a-z][a-z0-9_-]{0,63}$/', $pageName)) fail(400, '插件管理页面无效');
+if ($section === 'plugins' && array_key_exists('plugin', $query)) {
+    $pluginId = $query['plugin'];
+    $pageName = $query['page'] ?? null;
+    if (!is_string($pluginId) || !is_string($pageName)
+        || !preg_match('/^[a-z][a-z0-9_-]{1,31}$/D', $pluginId)
+        || !preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $pageName)) fail(400, '插件管理页面无效');
     $record = h('SELECT enabled FROM plugins WHERE name=?', [$pluginId])->fetch();
     if (!$record || !(int)$record['enabled']) fail(404, '插件未启用或不存在');
     $adminPage = extension_plugin_management_page($pluginId, $pageName);
@@ -33,16 +41,16 @@ if ($section === 'plugins' && array_key_exists('plugin', $_GET)) {
     foreach (extension_registry()['admin_pages'] as $registeredPage) {
         if (($registeredPage['plugin'] ?? '') !== $pluginId || empty($registeredPage['plugin_management'])) continue;
         $url = '/admin/plugins?plugin='.rawurlencode($pluginId).'&page='.rawurlencode((string)$registeredPage['management_page']);
-        $pages[] = '<a'.($registeredPage['management_page'] === $pageName ? ' class="active"' : '').' href="'.e($url).'">'.e($registeredPage['navigation']).'</a>';
+        $pages[] = '<a'.($registeredPage['management_page'] === $pageName ? ' class="active" aria-current="page"' : '').' href="'.e($url).'">'.e($registeredPage['navigation']).'</a>';
     }
-    $body = '<nav class="plugin-management-tabs" aria-label="插件管理页面"><a href="/admin/plugins">返回插件列表</a>'.implode('', $pages).'</nav>'.(string)$result['body'];
+    $body = '<nav class="plugin-management-tabs catalog-nav" aria-label="插件管理页面"><a href="/admin/plugins">返回插件列表</a>'.implode('', $pages).'</nav>'.(string)$result['body'];
     page((string)($result['title'] ?? $adminPage['title']), $body, '', false, true);
     return;
 }
 
-if ($section === 'themes' && array_key_exists('theme', $_GET)) {
-    $themeId = (string)($_GET['theme'] ?? '');
-    if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $themeId)) fail(400, '模板管理页面无效');
+if ($section === 'themes' && $method === 'GET' && array_key_exists('theme', $query)) {
+    $themeId = $query['theme'];
+    if (!is_string($themeId) || !preg_match('/^[a-z][a-z0-9_-]{1,31}$/D', $themeId)) fail(400, '模板管理页面无效');
     $directory = $root.'/templates/'.$themeId;
     try { extension_validate_directory($directory, 'theme', $themeId); }
     catch (Throwable $error) { fail(404, '模板不可用：'.$error->getMessage()); }
@@ -56,21 +64,23 @@ if ($section === 'themes' && array_key_exists('theme', $_GET)) {
     foreach ($definitions as $key=>$definition) {
         $name = 'theme_setting_'.$key; $value = $values[$key] ?? $definition['default'];
         $label = e($definition['label']);
-        if ($definition['type'] === 'textarea') $control = '<textarea name="'.e($name).'" maxlength="'.(int)$definition['max'].'" rows="5">'.e((string)$value).'</textarea>';
-        elseif ($definition['type'] === 'select') { $control = '<select name="'.e($name).'">'; foreach ($definition['options'] as $optionValue=>$optionLabel) $control .= '<option value="'.e($optionValue).'"'.($value === $optionValue ? ' selected' : '').'>'.e($optionLabel).'</option>'; $control .= '</select>'; }
+        if ($definition['type'] === 'textarea') $control = '<textarea class="admin-control" name="'.e($name).'" maxlength="'.(int)$definition['max'].'" rows="5">'.e((string)$value).'</textarea>';
+        elseif ($definition['type'] === 'select') { $control = '<select class="admin-control" name="'.e($name).'">'; foreach ($definition['options'] as $optionValue=>$optionLabel) $control .= '<option value="'.e($optionValue).'"'.($value === $optionValue ? ' selected' : '').'>'.e($optionLabel).'</option>'; $control .= '</select>'; }
         elseif ($definition['type'] === 'checkbox') $control = '<input type="hidden" name="'.e($name).'" value="0"><label class="check-label"><input type="checkbox" name="'.e($name).'" value="1"'.($value ? ' checked' : '').'> '. $label.'</label>';
-        else $control = '<input type="'.($definition['type'] === 'color' ? 'color' : 'text').'" name="'.e($name).'" maxlength="'.(int)($definition['max'] ?? 7).'" value="'.e((string)$value).'">';
+        else $control = '<input class="admin-control" type="'.($definition['type'] === 'color' ? 'color' : 'text').'" name="'.e($name).'" maxlength="'.(int)($definition['max'] ?? 7).'" value="'.e((string)$value).'">';
         $fields .= $definition['type'] === 'checkbox' ? '<div class="theme-setting">'.$control.'</div>' : '<label class="theme-setting">'.$label.$control.'</label>';
     }
-    $body = '<nav class="plugin-management-tabs" aria-label="模板管理页面"><a href="/admin/themes">返回模板列表</a></nav><section class="theme-settings"><p>'.e((string)($manifest['title'] ?? $themeId)).' 的显示设置。</p><form class="form" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($themeId).'"><input type="hidden" name="action" value="save-settings">'.$fields.'<button class="primary">保存设置</button></form></section>';
+    $body = '<nav class="plugin-management-tabs catalog-nav" aria-label="模板管理页面"><a href="/admin/themes">返回模板列表</a></nav>'
+        .'<section class="theme-settings catalog-settings" aria-labelledby="catalog-settings-title"><header><h2 id="catalog-settings-title">'.e($manifest['title'] ?? $themeId).'</h2><p>显示设置</p></header>'
+        .'<form class="form" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($themeId).'"><input type="hidden" name="action" value="save-settings"><div class="catalog-settings-fields">'.$fields.'</div><footer><button class="primary" type="submit">保存设置</button></footer></form></section>';
     page('模板设置', $body, '', false, true);
     return;
 }
 
 if ($method === 'POST') {
     require_post();
-    $name = (string)($_POST['name'] ?? '');
-    $action = (string)($_POST['action'] ?? '');
+    $name = (string)($post['name'] ?? '');
+    $action = (string)($post['action'] ?? '');
     if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $name)) fail(400, '扩展 ID 无效');
     if ($section === 'themes') {
         $directory = $root.'/templates/'.$name;
@@ -80,7 +90,7 @@ if ($method === 'POST') {
         if ($action === 'save-settings') {
             $definitions = is_array($manifest) ? theme_manifest_settings($manifest) : [];
             if (!$definitions) fail(400, '该模板未声明可管理设置。');
-            try { $values = theme_settings_from_input($_POST, $definitions); }
+            try { $values = theme_settings_from_input($post, $definitions); }
             catch (Throwable $error) { fail(400, '模板设置无效。'); }
             h('INSERT INTO themes(name,version,enabled,config_json) VALUES(?,?,0,?) ON DUPLICATE KEY UPDATE version=VALUES(version),config_json=VALUES(config_json)', [$name,(string)($manifest['version'] ?? '1.0.0'),json_encode($values, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);
             invalidate('theme-settings:'.$name);
@@ -89,8 +99,8 @@ if ($method === 'POST') {
         }
 
         if ($action === 'delete') {
-            if (empty($_POST['confirm_token'])) confirmation_page('确认删除模板','将永久删除模板目录，此操作不可恢复。','theme.delete',['name'=>$name,'action'=>'delete'],$name);
-            require_confirmation('theme.delete',$name,(string)$_POST['confirm_token']);
+            if (empty($post['confirm_token'])) confirmation_page('确认删除模板','将永久删除模板目录，此操作不可恢复。','theme.delete',['name'=>$name,'action'=>'delete'],$name);
+            require_confirmation('theme.delete',$name,(string)$post['confirm_token']);
             if ($name === 'default') fail(400, '默认模板不能删除');
             $config=load_config();
             if (($config['theme'] ?? 'default') === $name) fail(409, '当前模板正在使用，请先启用其他模板');
@@ -116,17 +126,19 @@ if ($method === 'POST') {
     $manifestFile = is_file($directory.'/plugin.json') ? $directory.'/plugin.json' : $directory.'/manifest.json';
     $manifest = is_file($manifestFile) ? json_decode((string)file_get_contents($manifestFile), true) : null;
     if ($action === 'purge') {
-        if (empty($_POST['confirm_token'])) confirmation_page('确认永久删除插件','将永久删除插件目录、登记、迁移记录、任务、用户字段、搜索文档和全部插件数据表，此操作不可恢复。','plugin.purge',['name'=>$name,'action'=>'purge'],$name);
-        require_confirmation('plugin.purge',$name,(string)$_POST['confirm_token']);
+        if (empty($post['confirm_token'])) confirmation_page('确认永久删除插件','将永久删除插件目录、登记、迁移记录、任务、用户字段、搜索文档和全部插件数据表，此操作不可恢复。','plugin.purge',['name'=>$name,'action'=>'purge'],$name);
+        require_confirmation('plugin.purge',$name,(string)$post['confirm_token']);
         try { extension_purge_plugin($name); remove_tree($directory); if (is_dir($directory) || is_link($directory)) throw new RuntimeException('插件目录无法完全删除，请检查文件权限'); }
         catch(Throwable $error){extension_invalidate('plugins');fail(409,'插件永久删除失败：'.$error->getMessage());}
         extension_invalidate('plugins');
         redirect('/admin/plugins');
     }
-    if (!in_array($action, ['disable','uninstall'], true)) try { extension_validate_directory($directory, 'plugin', $name); } catch (Throwable $error) { fail(400, '插件预检失败：'.$error->getMessage()); }
+    if (in_array($action, ['install','upgrade','enable'], true)) try {
+        extension_validate_directory($directory, 'plugin', $name);
+    } catch (Throwable $error) { fail(400, '插件预检失败：'.$error->getMessage()); }
 
     if (!in_array($action, ['install','upgrade','enable','disable','uninstall'], true)) fail(400, '插件操作无效');
-    if ($action === 'uninstall' && empty($_POST['confirm_token'])) {
+    if ($action === 'uninstall' && empty($post['confirm_token'])) {
         $orphaned=!is_dir($directory);
         $token=confirmation_token('plugin.uninstall',$name);
         $pluginTitle=is_array($manifest)?(string)($manifest['title']??$name):$name;
@@ -136,36 +148,76 @@ if ($method === 'POST') {
         return;
     }
     if ($action === 'uninstall') {
-        require_confirmation('plugin.uninstall',$name,(string)$_POST['confirm_token']);
+        require_confirmation('plugin.uninstall',$name,(string)$post['confirm_token']);
         if (!is_dir($directory)) plugin_set_enabled_state(db(),$name,false);
     }
     if ($name === 'zip-remote-attachments' && in_array($action,['install','upgrade','enable'],true)) foreach (builtin_plugin_schema($name) as $sql) h($sql);
-    try { extension_plugin_lifecycle($name,$action,!empty($_POST['preserve_data'])); }
+    try { extension_plugin_lifecycle($name,$action,!empty($post['preserve_data']), approvedByAdmin: true); }
     catch(Throwable $error){extension_invalidate('plugins');fail(409,'插件操作失败：'.$error->getMessage());}
     extension_invalidate('plugins');
     redirect('/admin/plugins');
 }
 
-$body = '';
+$actionForm = static function (string $name, string $action, string $label, string $class): string {
+    return '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'">'
+        .'<input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="'.e($action).'">'
+        .'<button type="submit" class="'.e($class).'">'.e($label).'</button></form>';
+};
+$body = '<div class="extension-catalog">';
 $invalidExtensions = [];
 if ($section === 'themes') {
-    $body .= '<p class="admin-intro">启用前执行结构与质量预检，不是安全执行控制。模板目录名可以修改，清单中的主题 ID 无需同步修改。默认模板不能删除；删除其他模板前需先切换模板。</p>';
+    $body .= '<div class="admin-list-toolbar catalog-toolbar"><p class="admin-intro">启用前会检查模板结构与兼容性，模板代码仍需人工审查。默认模板不可删除，删除正在使用的模板前请先切换模板。</p></div>';
     $active = (string)(load_config()['theme'] ?? 'default');
-    foreach (new DirectoryIterator($root.'/templates') as $dir) {
+    $cards = [];
+    foreach (is_dir($root.'/templates') ? new DirectoryIterator($root.'/templates') : [] as $dir) {
         if (!$dir->isDir() || $dir->isDot() || !preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $dir->getFilename())) continue;
         $name = $dir->getFilename();
         $manifest = json_decode((string)@file_get_contents($dir->getPathname().'/theme.json'), true);
         try { extension_validate_directory($dir->getPathname(), 'theme', $name); } catch (Throwable $error) { $invalidExtensions[$name] = $error->getMessage(); continue; }
         $settings = is_array($manifest) ? theme_manifest_settings($manifest) : [];
-        $body .= '<section class="extension-row"><div><h2>'.e($manifest['title'] ?? $name).($name === $active ? ' <small>当前使用</small>' : '').'</h2><p>'.e($name).' · '.e($manifest['version'] ?? '未知版本').' · '.e($manifest['author'] ?? '未知作者').'</p></div><div class="extension-actions">';
-        if ($settings) $body .= '<a class="button extension-manage" href="/admin/themes?theme='.rawurlencode($name).'">管理</a>';
-        if ($name !== $active) $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="enable"><button class="primary">启用</button></form>';
-        if ($name !== 'default' && $name !== $active) $body .= '<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="delete"><button>删除模板</button></form>';
-        $body .= '</div></section>';
+        $isActive = $name === $active;
+        $preview = '<span class="catalog-preview-placeholder" aria-hidden="true"><i></i><i></i><i></i></span>';
+        // Only look at fixed raster filenames on the existing public theme asset path.
+        $previewTypes = ['screenshot.webp'=>IMAGETYPE_WEBP, 'screenshot.png'=>IMAGETYPE_PNG, 'screenshot.jpg'=>IMAGETYPE_JPEG, 'screenshot.jpeg'=>IMAGETYPE_JPEG];
+        if ($name === 'default') $previewTypes['banner.webp'] = IMAGETYPE_WEBP;
+        foreach ($previewTypes as $asset => $type) {
+            $file = extension_secure_runtime_file($root, 'templates/'.$name.'/assets/'.$asset);
+            if ($file === null || (@getimagesize($file)[2] ?? null) !== $type) continue;
+            $preview .= '<img src="/templates/'.rawurlencode($name).'/assets/'.rawurlencode($asset).'" alt="" loading="lazy" decoding="async">';
+            break;
+        }
+
+        $card = '<article class="catalog-theme'.($isActive ? ' is-active' : '').'">'
+            .'<div class="catalog-preview">'.$preview.'</div><div class="catalog-theme-details">'
+            .($isActive ? '<span class="catalog-status is-enabled">当前使用</span>' : '')
+            .'<h2>'.e($manifest['title'] ?? $name).'</h2><p class="catalog-meta">'.e($name).' · 版本 '.e($manifest['version'] ?? '未知').' · '.e($manifest['author'] ?? '未知作者').'</p>';
+        $card .= '</div><div class="catalog-theme-actions">';
+        if (!$isActive) $card .= $actionForm($name, 'enable', '启用', 'primary');
+        if ($settings) $card .= '<a class="catalog-button" href="/admin/themes?theme='.rawurlencode($name).'">管理设置</a>';
+        if ($name !== 'default' && !$isActive) $card .= $actionForm($name, 'delete', '删除模板', 'catalog-button is-danger');
+        $cards[$name] = $card.'</div></article>';
     }
-    if ($invalidExtensions) { $body .= '<section class="extension-errors"><h2>未通过检查的模板</h2>'; foreach ($invalidExtensions as $name => $reason) $body .= '<article><strong>'.e($name).'</strong><p>'.e($reason).'</p></article>'; $body .= '</section>'; }
+    if (!isset($cards[$active])) {
+        $reason = isset($invalidExtensions[$active]) ? '未通过检查。' : '目录缺失或不可用。';
+        $body .= '<section class="catalog-notice"><h2>当前模板不可用</h2><p>'.e($active).'：'.$reason.'</p></section>';
+    }
+    if ($cards) {
+        $activeCard = $cards[$active] ?? '';
+        unset($cards[$active]);
+        $body .= '<div class="catalog-theme-grid">'.$activeCard.implode('', $cards).'</div>';
+    } else {
+        $body .= '<p class="catalog-empty">没有通过检查的模板。</p>';
+    }
 } else {
-    $body .= '<p class="admin-intro">插件按安装、升级、启用、停用、卸载的生命周期管理。依赖、冲突和核心能力在状态变更前检查；卸载可保留数据。插件仍是受信任的 PHP 代码，启用前必须完成人工审查。</p>';
+    $body .= '<div class="admin-list-toolbar catalog-toolbar"><p class="admin-intro">插件会执行 PHP 代码，请在启用前人工审查。未应用的插件迁移须由运维人员通过 CLI 执行。状态变更前会检查依赖、冲突和核心能力，卸载时可选择保留数据。</p></div>';
+    $pluginRow = static function (string $title, string $name, string $actions, string $description, string $meta, string $state, string $stateClass): string {
+        return '<tr role="row"><th scope="row" role="rowheader"><strong class="catalog-plugin-title">'.e($title).'</strong>'
+            .($title !== $name ? '<span class="catalog-meta">'.e($name).'</span>' : '')
+            .'<div class="catalog-row-actions">'.$actions.'</div></th>'
+            .'<td role="cell" class="catalog-plugin-description"><p>'.e($description).'</p><p class="catalog-meta">'.e($meta).'</p></td>'
+            .'<td role="cell" class="catalog-plugin-status"><span class="catalog-status '.e($stateClass).'">'.e($state).'</span></td></tr>';
+    };
+    $rows = '';
     $installed = [];
     foreach (h('SELECT name,version,enabled FROM plugins')->fetchAll() as $row) $installed[$row['name']] = $row;
     foreach (is_dir($root.'/plugins') ? new DirectoryIterator($root.'/plugins') : [] as $dir) {
@@ -180,17 +232,55 @@ if ($section === 'themes') {
             $adminPath = is_array($manifest) ? extension_manifest_admin_path($manifest, $name) : null;
             if ($enabled && $adminPath !== null) $adminPath = extension_plugin_management_path($name, $adminPath);
         } catch (Throwable $error) { $invalidExtensions[$name] = $error->getMessage(); unset($installed[$name]); continue; }
-        $state=$record?($enabled?'已启用':'已停用'):'未安装';
-        $body .= '<section class="extension-row"><div><h2>'.e($manifest['title'] ?? $name).'</h2><p>'.e($name).' · '.e($manifest['version'] ?? '未知版本').' · '.e($manifest['description'] ?? '暂无说明').' · '.$state.'</p></div><div class="extension-actions">';
-        if ($enabled && $adminPath !== null) $body .= '<a class="button extension-manage" href="'.e($adminPath).'">管理</a>';
-        if(!$record)$body.='<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="install"><button class="primary">安装</button></form>';
-        else{$upgrade=version_compare((string)($manifest['version']??'0.0.0'),(string)$record['version'],'>');if($upgrade)$body.='<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="upgrade"><button>升级</button></form>';$body.='<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="'.($enabled?'disable':'enable').'"><button class="primary">'.($enabled?'停用':'启用').'</button></form>';if(!$enabled)$body.='<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="uninstall"><button>卸载</button></form>';}$body.='</div></section>';
+        $actions = '';
+        $version = (string)($manifest['version'] ?? '未知');
+        $meta = '版本 '.$version;
+        if ($enabled && $adminPath !== null) $actions .= '<a class="catalog-row-action" href="'.e($adminPath).'">管理</a>';
+        if (!$record) {
+            $actions .= $actionForm($name, 'install', '安装', 'catalog-row-action');
+        } else {
+            if (version_compare((string)($manifest['version'] ?? '0.0.0'), (string)$record['version'], '>')) {
+                $actions .= $actionForm($name, 'upgrade', '升级', 'catalog-row-action');
+                $meta = '已安装 '.$record['version'].' · 可升级至 '.$version;
+            }
+            $actions .= $actionForm($name, $enabled ? 'disable' : 'enable', $enabled ? '停用' : '启用', 'catalog-row-action');
+            if (!$enabled) $actions .= $actionForm($name, 'uninstall', '卸载', 'catalog-row-action is-danger');
+        }
+        $state = $record ? ($enabled ? '已启用' : '已停用') : '未安装';
+        $rows .= $pluginRow((string)($manifest['title'] ?? $name), $name, $actions, (string)($manifest['description'] ?? '暂无说明'), $meta, $state, $enabled ? 'is-enabled' : '');
         unset($installed[$name]);
     }
-    foreach($installed as $name=>$record){$enabled=(int)$record['enabled'];$body.='<section class="extension-row"><div><h2>'.e($name).'</h2><p>插件目录缺失 · 已登记版本 '.e($record['version']).' · '.($enabled?'已启用':'已停用').'</p></div><div class="extension-actions">';if($enabled)$body.='<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="disable"><button class="primary">停用</button></form>';$body.='<form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="uninstall"><button>强制永久删除</button></form>';$body.='</div></section>';}
-    if ($invalidExtensions) { $body .= '<section class="extension-errors"><h2>未通过检查的插件</h2>'; foreach ($invalidExtensions as $name => $reason) $body .= '<article><strong>'.e($name).'</strong><p>'.e($reason).'</p><form method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="name" value="'.e($name).'"><input type="hidden" name="action" value="purge"><button>永久删除并清理数据</button></form></article>'; $body .= '</section>'; }
-    $rendererDiagnostics=extension_markdown_renderer_diagnostics();
-    if($rendererDiagnostics['conflict']){$body.='<section class="extension-errors"><h2>Markdown 主渲染器冲突</h2><p>当前选择：'.e((string)$rendererDiagnostics['active']).'。候选项按优先级排列：</p>';foreach($rendererDiagnostics['renderers'] as $renderer)$body.='<article><strong>'.e($renderer['plugin']).'</strong><p>优先级 '.(int)$renderer['priority'].' · '.e($renderer['reason']).'</p></article>';$body.='</section>';}
+    foreach ($installed as $name => $record) {
+        $enabled = (int)$record['enabled'];
+        $actions = $enabled ? $actionForm($name, 'disable', '停用', 'catalog-row-action') : '';
+        $actions .= $actionForm($name, 'uninstall', '强制永久删除', 'catalog-row-action is-danger');
+        $rows .= $pluginRow($name, $name, $actions, '插件目录缺失', '已登记版本 '.$record['version'], $enabled ? '已启用' : '已停用', 'is-warning');
+    }
+    $body .= '<p class="admin-intro">安装、升级或启用前，请审核插件的 PHP 代码。启用的插件拥有与应用相同的 PHP 进程权限。</p>'
+        .'<div class="catalog-plugin-list"><table class="catalog-plugin-table" role="table" aria-label="插件列表">'
+        .'<thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">插件</th><th scope="col" role="columnheader">说明</th><th scope="col" role="columnheader">状态</th></tr></thead><tbody role="rowgroup">'
+        .($rows !== '' ? $rows : '<tr role="row"><td role="cell" colspan="3" class="catalog-empty">暂无可管理的插件。</td></tr>')
+        .'</tbody></table></div>';
 }
-page($section === 'themes' ? '模板管理' : '插件管理', $body);
+if ($invalidExtensions) {
+    $body .= '<section class="catalog-notice"><h2>未通过检查的'.($section === 'themes' ? '模板' : '插件').'</h2><ul>';
+    foreach ($invalidExtensions as $name => $reason) {
+        $body .= '<li><strong>'.e($name).'</strong><p>'.e($reason).'</p>';
+        if ($section === 'plugins') $body .= $actionForm($name, 'purge', '永久删除并清理数据', 'catalog-button is-danger');
+        $body .= '</li>';
+    }
+    $body .= '</ul></section>';
+}
+if ($section === 'plugins') {
+    $rendererDiagnostics = extension_markdown_renderer_diagnostics();
+    if ($rendererDiagnostics['conflict']) {
+        $body .= '<section class="catalog-notice"><h2>Markdown 主渲染器冲突</h2><p>当前选择：'.e($rendererDiagnostics['active']).'。候选项按优先级排列：</p><ul>';
+        foreach ($rendererDiagnostics['renderers'] as $renderer) {
+            $body .= '<li><strong>'.e($renderer['plugin']).'</strong><p>优先级 '.(int)$renderer['priority'].' · '.e($renderer['reason']).'</p></li>';
+        }
+        $body .= '</ul></section>';
+    }
+}
+page($section === 'themes' ? '模板管理' : '插件管理', $body.'</div>');
 return;
+}

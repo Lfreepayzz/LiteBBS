@@ -169,6 +169,10 @@
 .post .body .markdown-body td,
 .post .body > .markdown-table-wrap th,
 .post .body > .markdown-table-wrap td { min-width: 8rem; padding: .65em .75em; border-right: 1px solid #d8e2dc; border-bottom: 1px solid #d8e2dc; text-align: left; vertical-align: top; }
+.markdown-editor-preview .markdown-body .markdown-align-center,
+.post .body .markdown-body .markdown-align-center { text-align: center; }
+.markdown-editor-preview .markdown-body .markdown-align-right,
+.post .body .markdown-body .markdown-align-right { text-align: right; }
 .markdown-editor-preview .markdown-body th:last-child,
 .markdown-editor-preview .markdown-body td:last-child,
 .post .body .markdown-body th:last-child,

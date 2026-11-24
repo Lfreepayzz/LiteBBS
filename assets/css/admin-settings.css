@@ -1,30 +1,29 @@
-/* Scoped polish for the settings console. */
-.admin-settings-form { max-width: 1020px; margin: 0 auto; padding-bottom: 12px; }
-.admin-settings-form .settings-intro { align-items: center; margin: 0 0 22px; padding: 28px 30px; border: 1px solid #d8e2e8; border-radius: 8px; background: #edf5f8; }
-.admin-settings-form .eyebrow { color: #397195; }
-.admin-settings-form .settings-intro h2 { font-size: 28px; letter-spacing: 0; }
-.admin-settings-form .settings-intro p:not(.eyebrow) { max-width: 620px; color: #526773; line-height: 1.7; }
-.settings-save { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
-.settings-save span { color: #647783; font-size: 12px; white-space: nowrap; }
-.admin-settings-form .primary { border: 1px solid #1e638c; border-radius: 5px; background: #236f9d; box-shadow: 0 1px 2px rgba(16, 55, 78, .16); font-weight: 700; }
-.admin-settings-form .primary:hover { background: #185a84; }
-.admin-settings-form .settings-section { position: relative; margin-bottom: 16px; padding: 0; border: 1px solid #dfe7eb; border-radius: 8px; background: #fff; box-shadow: 0 1px 1px rgba(31, 52, 65, .025); overflow: hidden; }
-.admin-settings-form .settings-section-heading { align-items: center; gap: 14px; margin: 0; padding: 17px 22px; border-bottom: 1px solid #e4ebef; background: #fbfcfd; }
-.admin-settings-form .settings-section-heading > span { width: 30px; height: 30px; border: 1px solid #c9dee9; border-radius: 5px; background: #eaf4f8; color: #25698e; font-size: 10px; }
-.admin-settings-form .settings-section-heading h3 { font-size: 15px; }
-.admin-settings-form .settings-section-heading p { color: #72828b; }
-.admin-settings-form .settings-grid { gap: 20px; padding: 22px; }
-.admin-settings-form .settings-grid label { gap: 8px; color: #334651; font-size: 12px; }
-.admin-settings-form .settings-grid input, .admin-settings-form .settings-grid textarea, .admin-settings-form .settings-grid select { min-height: 40px; padding: 9px 11px; border-color: #cfdbe1; border-radius: 5px; background: #fff; transition: border-color .16s, box-shadow .16s; }
-.admin-settings-form .settings-grid textarea { min-height: 104px; }
-.admin-settings-form .settings-grid input:hover, .admin-settings-form .settings-grid textarea:hover, .admin-settings-form .settings-grid select:hover { border-color: #a8c4d3; }
-.admin-settings-form .settings-grid input:focus, .admin-settings-form .settings-grid textarea:focus, .admin-settings-form .settings-grid select:focus { border-color: #2879a7; box-shadow: 0 0 0 3px rgba(40, 121, 167, .13); }
-.admin-settings-form .settings-grid small { margin-top: -1px; color: #71818b; }
-.admin-settings-form .settings-verification { background: #fff; }
-.admin-settings-form .settings-verification .settings-grid { background: #f7fafb; }
-.admin-settings-form .settings-actions { margin-top: 24px; padding: 17px 20px; border: 1px solid #dce6ea; border-radius: 7px; background: #f8fbfc; }
-.admin-settings-form .settings-actions p { color: #5e707b; }
-.admin-settings-form .settings-actions strong { color: #345260; font-size: 12px; }
-.admin-settings-form .settings-actions .primary { min-width: 100px; }
-@media (max-width: 760px) { .admin-settings-form .settings-intro { align-items: flex-start; flex-direction: column; padding: 22px; } .admin-settings-form .settings-intro h2 { font-size: 25px; } .settings-save { width: 100%; justify-content: space-between; } .admin-settings-form .settings-section-heading { align-items: flex-start; padding: 15px 16px; } .admin-settings-form .settings-grid, .admin-settings-form .settings-grid-compact { grid-template-columns: 1fr; padding: 17px; } .admin-settings-form .settings-wide { grid-column: auto; } .admin-settings-form .settings-actions { align-items: stretch; flex-direction: column; } .admin-settings-form .settings-actions .primary { width: 100%; } }
-@media (prefers-color-scheme: dark) { .admin-settings-form .settings-intro { border-color: #385564; background: #172830; } .admin-settings-form .settings-intro p:not(.eyebrow), .settings-save span { color: #b5c6ce; } .admin-settings-form .settings-section { border-color: #38515d; background: #1d2930; } .admin-settings-form .settings-section-heading { border-color: #38515d; background: #202e36; } .admin-settings-form .settings-section-heading p, .admin-settings-form .settings-grid small { color: #aabac2; } .admin-settings-form .settings-grid input, .admin-settings-form .settings-grid textarea, .admin-settings-form .settings-grid select { border-color: #49616d; background: #182329; } .admin-settings-form .settings-verification .settings-grid { background: #1b2930; } .admin-settings-form .settings-actions { border-color: #38515d; background: #1c2930; } .admin-settings-form .settings-actions p { color: #b5c4cb; } .admin-settings-form .settings-actions strong { color: #d1e0e6; } }
+.settings-sections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    max-width: 960px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+}
+.settings-sections a { padding: 4px 0; color: var(--link); }
+.settings-sections a:hover { text-decoration: underline; }
+.admin-settings-form { max-width: 960px; }
+.settings-section { padding: 20px 0; border-bottom: 1px solid var(--line); scroll-margin-top: calc(var(--admin-bar-height) + 14px); }
+.settings-section h2 { margin: 0 0 12px; font-size: 17px; font-weight: 650; }
+.settings-section > p { margin: 0 0 12px; color: var(--muted); }
+.settings-grid { display: grid; gap: 14px; }
+.settings-grid label { display: grid; grid-template-columns: minmax(145px, 200px) minmax(0, 430px); align-items: start; gap: 4px 18px; font-weight: 600; }
+.settings-grid :is(input, select, textarea) { grid-column: 2; width: 100%; min-height: 38px; padding: 6px 10px; border-color: #8c8f94; font-weight: 400; }
+.settings-grid input[type=number] { width: 120px; max-width: 100%; }
+.settings-grid textarea { resize: vertical; }
+.settings-grid small { grid-column: 2; color: var(--muted); font-size: 13px; font-weight: 400; }
+.settings-actions { display: flex; align-items: center; flex-wrap: wrap-reverse; justify-content: space-between; gap: 10px 18px; padding-top: 18px; }
+.settings-actions p { margin: 0; color: var(--muted); font-size: 13px; }
+.settings-actions .primary { order: -1; min-height: 38px; }
+
+@media (max-width: 640px) {
+    .settings-sections { gap: 4px 14px; }
+    .settings-grid label { display: flex; flex-direction: column; }
+    .settings-grid :is(input, select, textarea), .settings-actions .primary { min-height: 42px; }
+}

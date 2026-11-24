@@ -47,7 +47,7 @@ final class PluginRouteRegistrar
 
     public function add(string|array $methods, string $pattern, callable $handler, array $options = []): void
     {
-        throw new LogicException('Plugin routes must use routes()->front() with a declared public_route_prefix.');
+        $this->front($methods, $pattern, $handler, $options);
     }
 
     public function front(string|array $methods, string $pattern, callable $handler, array $options = []): void
@@ -530,10 +530,12 @@ function extension_runtime_load(?string $onlyPlugin = null, ?string $hookKind = 
         try {
             $manifest = extension_plugin_manifest($id);
             if (!is_array($manifest)) throw new RuntimeException('Invalid plugin manifest.');
-            $entry = is_array($manifest) ? (string)($manifest['entry'] ?? '') : '';
-            $class = is_array($manifest) ? (string)($manifest['class'] ?? '') : '';
+            $entry = (string)($manifest['entry'] ?? '');
+            $class = (string)($manifest['class'] ?? '');
             $entryFile = extension_v2_entry_file($root.$id, $entry);
             if (($manifest['schema'] ?? null) !== 1 || ($manifest['id'] ?? '') !== $id || $entryFile === null || !extension_class_name_valid($class)) throw new RuntimeException('Invalid plugin manifest.');
+            $permissions = $manifest['permissions'] ?? [];
+            if (!is_array($permissions) || array_diff($permissions, ['database','storage','routes','views','assets'])) throw new RuntimeException('Invalid plugin permissions.');
             extension_manifest_hooks($manifest, 'slot');
             extension_manifest_hooks($manifest, 'preload');
             extension_manifest_hooks($manifest, 'event');
@@ -699,6 +701,7 @@ function extension_event(string $event, array $payload): void
     }
 }
 
+// The core write paths call this inside their transaction. Listener errors must escape.
 function extension_event_or_fail(string $event, array $payload): void
 {
     extension_validate_hook_payload($event,$payload);
@@ -731,14 +734,21 @@ function extension_event_sync(string $event, array $payload): void
 
 function extension_event_async(string $event, array $payload, int $delaySeconds = 0): void
 {
-    extension_validate_async_event_payload($event,$payload);
     try {
-        if (!extension_config_value_valid($payload)) throw new InvalidArgumentException('Async plugin event payload must be JSON-compatible.');
-        if (!extension_has_listeners('event', $event)) return;
-        enqueue_outbox_event($event, $payload, max(0, min(86400, $delaySeconds)));
+        extension_enqueue_async_event($event, $payload, $delaySeconds);
     } catch (Throwable $error) {
         error_log('plugin async event '.$event.' enqueue failed: '.$error->getMessage());
     }
+}
+
+// Use this inside a write transaction when enqueue errors must roll back the write.
+function extension_enqueue_async_event(string $event, array $payload, int $delaySeconds = 0): void
+{
+    extension_validate_async_event_payload($event,$payload);
+    if (!function_exists('enqueue_outbox_event')) require_once __DIR__.'/outbox.php';
+    if (!extension_config_value_valid($payload)) throw new InvalidArgumentException('Async plugin event payload must be JSON-compatible.');
+    if (!extension_has_listeners('event', $event)) return;
+    enqueue_outbox_event($event, $payload, max(0, min(86400, $delaySeconds)));
 }
 
 function extension_has_listeners(string $kind, string $hook): bool
@@ -797,10 +807,10 @@ function extension_invalidate(string $key): void
     invalidate('extension-read-pages');
 }
 
-function extension_plugin_degraded(string $id): bool
+function extension_plugin_degraded(string $id, bool $fresh = false): bool
 {
     static $requestState = [];
-    if (array_key_exists($id, $requestState)) return $requestState[$id];
+    if (!$fresh && array_key_exists($id, $requestState)) return $requestState[$id];
     $redis = redis_cache_client();
     if (!$redis) return $requestState[$id] = false;
     try { return $requestState[$id] = (bool)$redis->get(shared_cache_key('plugin-degraded:'.$id)); }

@@ -15,7 +15,7 @@
     <div class="aurora-header-inner">
       <a href="/" class="aurora-brand"><span class="aurora-brand-mark">A</span><span><?= e($c['site'] ?? 'LiteBBS') ?></span></a>
       <nav class="aurora-nav" aria-label="主导航"><a href="/"<?= $isHomePage ? ' aria-current="page"' : '' ?>>首页</a><a href="/search"<?= $requestPath === '/search' ? ' aria-current="page"' : '' ?>>发现</a><a href="/market">开发者</a><?= extension_slot('navigation.primary', ['path'=>$requestPath, 'user'=>$user]) ?></nav>
-      <div class="aurora-account"><?php if ($user): ?><?php if (($user['role'] ?? '') === 'admin'): ?><a class="aurora-admin" href="/admin">后台管理</a><?php endif; ?><a href="/me" class="aurora-user"><span><?= e(text_slice($user['username'], 0, 1)) ?></span><?= e($user['username']) ?></a><?php else: ?><a href="/login">登录</a><a class="aurora-join" href="/register">加入社区</a><?php endif; ?></div>
+      <div class="aurora-account"><?php if ($user): ?><?php if (($user['role'] ?? '') === 'admin'): ?><a class="aurora-admin" href="/admin">后台管理</a><?php endif; ?><a href="/me" class="aurora-user"><span><?= e(text_slice($user['username'], 0, 1)) ?></span><?= e($user['username']) ?></a><form method="post" action="/logout"><input type="hidden" name="csrf" value="<?= e(csrf()) ?>"><button type="submit">退出</button></form><?php else: ?><a href="/login">登录</a><a class="aurora-join" href="/register">加入社区</a><?php endif; ?></div>
     </div>
   </header>
   <main class="aurora-main">

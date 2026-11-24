@@ -175,25 +175,26 @@ function extension_validate_theme_pagination(array $manifest): void {
 }
 
 function extension_secure_runtime_file(string $root, string $relative): ?string {
-    static $resolvedCache = [];
-    $cacheKey = $root."\0".$relative;
-    if (array_key_exists($cacheKey, $resolvedCache)) return $resolvedCache[$cacheKey];
     if ($relative === '' || str_contains($relative, "\0") || str_contains($relative, "\n") || str_contains($relative, "\r")) return null;
     $rootReal = realpath($root);
     $relative = str_replace('\\', '/', $relative);
-    if ($rootReal === false || !is_dir($rootReal) || str_starts_with($relative, '/') || preg_match('~(?:^|/)\.\.(?:/|$)~', $relative)) return $resolvedCache[$cacheKey] = null;
+    if ($rootReal === false || !is_dir($rootReal) || str_starts_with($relative, '/') || preg_match('~(?:^|/)\.\.(?:/|$)~', $relative)) return null;
     $parts = preg_split('~/+~', $relative, -1, PREG_SPLIT_NO_EMPTY);
-    if (!$parts) return $resolvedCache[$cacheKey] = null;
+    if (!$parts) return null;
     $current = $rootReal;
     foreach ($parts as $part) {
-        if ($part === '.' || $part === '' || is_link($current.'/'.$part)) return $resolvedCache[$cacheKey] = null;
+        if ($part === '.' || $part === '' || is_link($current.'/'.$part)) return null;
         $current .= DIRECTORY_SEPARATOR.$part;
     }
     $resolved = realpath($current);
-    if ($resolved === false || !is_file($resolved) || is_link($resolved)) return $resolvedCache[$cacheKey] = null;
+    if ($resolved === false || !is_file($resolved) || is_link($resolved)) return null;
     $prefix = rtrim($rootReal, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
-    if (!str_starts_with($resolved, $prefix)) return $resolvedCache[$cacheKey] = null;
-    return $resolvedCache[$cacheKey] = $resolved;
+    if (DIRECTORY_SEPARATOR === '\\') {
+        if (!str_starts_with(strtolower($resolved), strtolower($prefix))) return null;
+    } elseif (!str_starts_with($resolved, $prefix)) {
+        return null;
+    }
+    return $resolved;
 }
 
 function extension_supports_core(string $range): bool {

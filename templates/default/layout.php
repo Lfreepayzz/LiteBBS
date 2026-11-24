@@ -20,7 +20,7 @@
       <nav class="account-nav" aria-label="账户">
         <?php if ($user): ?>
           <?php [$unreadNotifications,$unreadMessages]=unread_counts((int)$user['id']);$unreadTotal=$unreadNotifications+$unreadMessages; ?>
-          <a class="user-link" href="/me"><span class="mini-avatar" aria-hidden="true"><?php if (!empty($user['avatar_path'])): ?><img src="/avatar/<?= (int)$user['id'] ?>" alt=""><?php else: ?><?= e(text_slice($user['username'], 0, 1)) ?><?php endif; ?></span><span><?= e($user['username']) ?></span><?php if ($unreadTotal): ?><span class="notification-count" aria-label="<?= $unreadTotal ?> 条未读消息"><?= $unreadTotal > 99 ? '99+' : $unreadTotal ?></span><?php endif; ?></a>
+          <a class="user-link" href="/me"><span class="mini-avatar" aria-hidden="true"><?php if (!empty($user['avatar_path'])): ?><img src="/avatar/<?= (int)$user['id'] ?>?v=<?= rawurlencode((string)$user['avatar_path']) ?>" alt=""><?php else: ?><?= e(text_slice($user['username'], 0, 1)) ?><?php endif; ?></span><span><?= e($user['username']) ?></span><?php if ($unreadTotal): ?><span class="notification-count" aria-label="<?= $unreadTotal ?> 条未读消息"><?= $unreadTotal > 99 ? '99+' : $unreadTotal ?></span><?php endif; ?></a>
           <?php if ($user['role'] === 'admin'): ?><a href="/admin">管理</a><?php endif; ?>
           <form method="post" action="/logout"><input type="hidden" name="csrf" value="<?= e(csrf()) ?>"><button type="submit">退出</button></form>
         <?php else: ?>
@@ -50,7 +50,6 @@
       <section class="sidebar-card rules-card">
         <h2>社区公约</h2>
         <p><span>01</span>友善交流，尊重不同观点</p><p><span>02</span>发布清晰且有价值的内容</p><p><span>03</span>拒绝广告与重复灌水</p>
-        <a href="/robots.txt">查看社区规则 <span aria-hidden="true">→</span></a>
       </section>
       <?php // Front-end plugin sidebar blocks render as independent bottom sections. ?>
       <?= extension_slot('sidebar.sections', ['path'=>$requestPath, 'user'=>$user]) ?>
