@@ -70,7 +70,12 @@ if ($path==='/admin/extensions'&&in_array($method,['GET','POST'],true)) {
             $local=program_update_local_files();
             $changed=[];
             foreach($remote['files'] as $file=>$sha) if (($local[$file]??null)!==$sha) $changed[]=$file;
-            echo json_encode(['ok'=>true,'version'=>$remote['version'],'files'=>$changed,'downloaded'=>is_file(program_update_package())],JSON_UNESCAPED_UNICODE);
+            $state=program_update_state();
+            $downloaded=is_array($state)
+                && ($state['status']??'')==='downloaded'
+                && ($state['version']??'')===$remote['version']
+                && is_file(program_update_package());
+            echo json_encode(['ok'=>true,'version'=>$remote['version'],'files'=>$changed,'downloaded'=>$downloaded],JSON_UNESCAPED_UNICODE);
         } catch(Throwable $error) { http_response_code(502); echo json_encode(['ok'=>false,'error'=>$error->getMessage()],JSON_UNESCAPED_UNICODE); }
         return;
     }
@@ -134,14 +139,14 @@ if ($path==='/admin/extensions'&&in_array($method,['GET','POST'],true)) {
              .'<form method="post" class="database-upgrade-form"><input type="hidden" name="csrf" value="'.$csrf.'"><input type="hidden" name="action" value="migrate_database"><button class="primary" type="submit"'.($databaseCurrent ? ' disabled' : '').'>立即升级数据库结构</button></form>'
             .'<p>表重建和碎片整理属于高负载维护操作，请在维护窗口由运维人员通过数据库工具执行。</p>';
     if($databaseReport['legacy_tables'])$databaseContent.='<p>检测到已迁移的旧附件表：'.e(implode('、',$databaseReport['legacy_tables'])).'。确认新表数据无误后再执行清理。</p><form method="post"><input type="hidden" name="csrf" value="'.$csrf.'"><input type="hidden" name="action" value="cleanup_legacy_database"><button type="submit">清理残留数据库表</button></form>';
-    $status = $ready ? '已下载更新包供检查（GitHub 文件树 '.e((string)($state['version'] ?? '')).'）。' : '尚未检查更新。';
+    $status = $ready ? '已下载更新包，等待通过部署流程安装（GitHub 文件树 '.e((string)($state['version'] ?? '')).'）。' : '尚未检查更新。';
     $body = '<div class="program-update-page">'
         .'<section class="program-update-panel" aria-labelledby="program-update-heading">'
         .'<h2 id="program-update-heading">程序文件</h2>'
         .'<div class="program-update-panel-body" id="program-update">'
         .'<dl class="program-update-info"><div><dt>核心版本</dt><dd><code>'.e(LITEBBS_VERSION).'</code></dd></div>'
         .'<div><dt>更新源</dt><dd><a href="https://github.com/'.e(program_update_repository()).'">GitHub <code>'.e(program_update_repository()).'</code></a></dd></div></dl>'
-        .'<p>可查看文件差异并下载更新包供检查。网页覆盖更新已禁用，请通过部署流程安装经过验证的版本。</p>'
+        .'<p>可查看文件差异并下载更新包。网页覆盖更新已禁用；下载不会修改程序文件，请通过部署流程安装经过验证的版本。</p>'
         .'<input type="hidden" id="program-update-csrf" value="'.$csrf.'">'
         .'<p id="program-update-status" class="program-update-notice" data-state="'.($ready ? 'success' : 'idle').'" role="status" aria-atomic="true">'.$status.'</p>'
         .'<progress id="program-update-progress" max="100" aria-label="程序更新进度" hidden></progress>'
