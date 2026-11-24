@@ -632,11 +632,29 @@ function cache_versions(array $keys): array
     if (!$missing) return $versions;
 
     $values = [];
-    if ($redis = redis_cache_client()) {
+    $redis = redis_cache_client();
+    if ($redis) {
         try {
             $sharedKeys = array_map(static fn(string $key): string => shared_cache_key('@version:'.$key), $missing);
             $values = $redis->mGet($sharedKeys);
             if (!is_array($values)) throw new RuntimeException('Unexpected Redis MGET response.');
+
+            // Version keys have no TTL. Initialize only absent keys from the
+            // local fallback, so regular Redis-backed reads avoid one file read
+            // per cache dependency.
+            $absent = [];
+            foreach ($missing as $index => $key) {
+                if (!is_numeric($values[$index] ?? null) || (int)$values[$index] < 1) $absent[$index] = $key;
+            }
+            if ($absent) {
+                $pipeline = $redis->multi(Redis::PIPELINE);
+                foreach ($absent as $index => $key) $pipeline->setNx($sharedKeys[$index], (string)local_cache_version($key));
+                $pipeline->mGet(array_values(array_intersect_key($sharedKeys, $absent)));
+                $result = $pipeline->exec();
+                $initialized = $result[count($absent)] ?? null;
+                if (!is_array($initialized)) throw new RuntimeException('Unexpected Redis version initialization response.');
+                foreach (array_keys($absent) as $position => $index) $values[$index] = $initialized[$position] ?? null;
+            }
         } catch (Throwable $error) {
             $values = [];
             $state['@redis-failed'] = true;
@@ -644,7 +662,10 @@ function cache_versions(array $keys): array
         }
     }
     foreach ($missing as $index => $key) {
-        $version = max(local_cache_version($key), (int)($values[$index] ?? 1));
+        $sharedVersion = $values[$index] ?? null;
+        $version = is_numeric($sharedVersion) && (int)$sharedVersion > 0
+            ? (int)$sharedVersion
+            : local_cache_version($key);
         $state['@version:'.$key] = ['expires'=>PHP_INT_MAX, 'value'=>$version];
         $versions[$key] = $version;
     }
