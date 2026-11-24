@@ -183,6 +183,7 @@ if ($frameworkResponse instanceof \LiteBBS\Framework\Response) {
     if (isset($requestState['@db-connect-ms'])) $requestTimings['db'] = round((float)$requestState['@db-connect-ms'], 1);
     if (isset($requestState['@sql-ms'])) $requestTimings['sql'] = round((float)$requestState['@sql-ms'], 1);
     if (isset($requestState['@sql-count'])) $requestTimings['queries'] = (float)$requestState['@sql-count'];
+    if (isset($requestState['@cache-wait-ms'])) $requestTimings['cache_wait'] = round((float)$requestState['@cache-wait-ms'], 1);
     if (!headers_sent() && getenv('LITEBBS_DEBUG_TIMING') === '1') header('Server-Timing: '.implode(', ', array_map(static fn(string $name, float $duration): string => $name.';dur='.$duration, array_keys($requestTimings), $requestTimings)));
     $frameworkResponse->send(); exit;
 }
