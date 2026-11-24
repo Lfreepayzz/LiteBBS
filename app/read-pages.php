@@ -38,7 +38,6 @@ if (preg_match('~^/(?:t/(\d+)|topic-(\d+)(?:-(\d+))?)$~', $path, $match)) {
     ]));
     $pageCacheKey = 'topic-page:v5:'.$pageSize.':'.$id.':'.$shellVersion.':'.(int)$versions['topic:'.$id].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'].':'.(int)$versions['plugins'].':'.(int)$versions['theme-settings:'.$theme];
     if ($anonymous && $afterId === 0 && ($cachedPage = page_cache_read($pageCacheKey, 120)) !== null) {
-        count_topic_view($id);
         echo (string)($cachedPage[0] ?? '');
         return;
     }
@@ -115,7 +114,6 @@ if (preg_match('~^/(?:t/(\d+)|topic-(\d+)(?:-(\d+))?)$~', $path, $match)) {
         if (!empty($topic['is_locked'])) $body .= '<p class="locked-note">该主题已锁定，暂不能回复。</p>';
         elseif ($user) $body .= '<section class="reply-composer" id="reply-composer" aria-labelledby="reply-composer-title"><div class="reply-composer-heading"><div><p class="eyebrow">YOUR REPLY</p><h2 id="reply-composer-title">参与讨论</h2></div><span>以 '.e($user['username']).' 的身份回复</span></div><div class="reply-quote-note" hidden><strong></strong><blockquote></blockquote></div><form method="post" action="/t/'.$id.'/reply"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" id="reply-to-post" name="reply_to_post" value=""><label class="reply-editor" for="reply-body"><span>回复内容</span><textarea id="reply-body" name="body" maxlength="12000" rows="7" placeholder="写下清晰、友善且有帮助的回复…" required></textarea></label>'.extension_slot('reply.create.fields', ['topic'=>$topic, 'user'=>$user]).'<div class="reply-composer-actions"><small>支持换行纯文本，最多 12,000 字</small><button class="primary">发布回复</button></div>'.extension_slot('reply.form.after', ['topic'=>$topic, 'user'=>$user]).'</form></section>';
 
-    count_topic_view($id);
     if ($anonymous && $afterId === 0) {
         ob_start();
         page($topic['title'], $body, '讨论主题：'.$topic['title'], true);
