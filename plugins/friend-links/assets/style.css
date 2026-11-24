@@ -1,11 +1,25 @@
+.friend-links-sidebar,
+.friend-links-application {
+  --friend-links-surface: var(--default-card-bg, var(--surface, #fff));
+  --friend-links-soft: var(--default-secondbg, var(--soft, #f8f9fc));
+  --friend-links-line: var(--default-card-border, var(--line, #e4e8f0));
+  --friend-links-accent: var(--default-main, var(--accent, #315efb));
+  --friend-links-muted: var(--default-secondtext, var(--muted, #667085));
+}
+
+html[data-theme="dark"] .friend-links-application {
+  --friend-links-success-bg: #162e24;
+  --friend-links-success-text: #a3e3bf;
+}
+
 .friend-links-sidebar {
   display: grid;
   min-width: 0;
   gap: .65rem;
   padding: 16px;
-  border: 1px solid var(--line, rgba(127, 127, 127, .22));
+  border: 1px solid var(--friend-links-line);
   border-radius: 10px;
-  background: var(--surface, #fff);
+  background: var(--friend-links-surface);
   box-shadow: 0 8px 24px rgba(31, 42, 68, .045);
   overflow-wrap: anywhere;
 }
@@ -25,7 +39,7 @@
   padding: .1rem .25rem;
   border: 0;
   border-radius: 0;
-  color: var(--accent, #315efb);
+  color: var(--friend-links-accent);
   font-size: .68rem;
   font-weight: 700;
 }
@@ -55,17 +69,17 @@
   min-height: 28px;
   padding: .18rem 0;
   border-radius: 0;
-  color: var(--muted, #667085);
+  color: var(--friend-links-muted);
   text-decoration: none;
   transition: color .15s ease;
 }
 
 .friend-links-list a:nth-child(n + 3) {
-  border-top: 1px solid var(--line, #e4e8f0);
+  border-top: 1px solid var(--friend-links-line);
 }
 
 .friend-links-list a:hover {
-  color: var(--accent, #315efb);
+  color: var(--friend-links-accent);
 }
 
 .friend-links-item {
@@ -85,7 +99,7 @@
 .friend-links-list small,
 .friend-links-help,
 .friend-links-meta {
-  color: #68707a;
+  color: var(--friend-links-muted, #68707a);
   font-size: .82rem;
   line-height: 1.45;
 }
@@ -116,13 +130,13 @@
 
 .friend-links-application-header {
   padding-bottom: 1.2rem;
-  border-bottom: 1px solid var(--line, #e4e8f0);
+  border-bottom: 1px solid var(--friend-links-line);
 }
 
 .friend-links-eyebrow {
   display: block;
   margin-bottom: .55rem;
-  color: var(--accent, #315efb);
+  color: var(--friend-links-accent, var(--accent, #315efb));
   font-size: .68rem;
   font-weight: 800;
   letter-spacing: .08em;
@@ -135,7 +149,7 @@
 .friend-links-application-header p {
   max-width: 620px;
   margin: .65rem 0 0;
-  color: var(--muted, #667085);
+  color: var(--friend-links-muted);
   line-height: 1.7;
 }
 
@@ -153,13 +167,13 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: .6rem;
   padding: .85rem;
-  border: 1px solid var(--line, #e4e8f0);
+  border: 1px solid var(--friend-links-line);
   border-radius: .6rem;
-  background: var(--soft, #f8f9fc);
+  background: var(--friend-links-soft);
 }
 
 .friend-links-steps span {
-  color: var(--accent, #315efb);
+  color: var(--friend-links-accent);
   font-size: .72rem;
   font-weight: 800;
 }
@@ -176,7 +190,7 @@
 .friend-links-steps small,
 .friend-links-form label small {
   margin-top: .1rem;
-  color: var(--muted, #667085);
+  color: var(--friend-links-muted);
   font-size: .77rem;
   font-weight: 400;
   line-height: 1.45;
@@ -186,9 +200,9 @@
   max-width: none;
   margin: 0;
   padding: 1.2rem;
-  border: 1px solid var(--line, #e4e8f0);
+  border: 1px solid var(--friend-links-line);
   border-radius: .7rem;
-  background: var(--soft, #f8f9fc);
+  background: var(--friend-links-soft);
 }
 
 .friend-links-form h2 {
@@ -197,7 +211,7 @@
 }
 
 .friend-links-form em {
-  color: var(--muted, #667085);
+  color: var(--friend-links-muted);
   font-size: .78rem;
   font-style: normal;
   font-weight: 400;
@@ -210,11 +224,11 @@
   gap: 1rem;
   margin-top: .35rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--line, #e4e8f0);
+  border-top: 1px solid var(--friend-links-line);
 }
 
 .friend-links-submit span {
-  color: var(--muted, #667085);
+  color: var(--friend-links-muted);
   font-size: .78rem;
   line-height: 1.45;
 }
@@ -243,8 +257,8 @@
 .friend-links-message {
   padding: .8rem 1rem;
   border-radius: .5rem;
-  background: #e9f7ef;
-  color: #17633d;
+  background: var(--friend-links-success-bg, #e9f7ef);
+  color: var(--friend-links-success-text, #17633d);
 }
 
 .friend-links-admin-list {
@@ -622,7 +636,7 @@
   }
 
   .friend-links-list a + a {
-    border-top: 1px solid var(--line, #e4e8f0);
+    border-top: 1px solid var(--friend-links-line);
   }
 
   .friend-links-steps {
