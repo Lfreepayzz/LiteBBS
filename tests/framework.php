@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/app/core.php';
 require_once dirname(__DIR__).'/app/feed-cursor.php';
 require_once dirname(__DIR__).'/app/topic-cursor.php';
+require_once dirname(__DIR__).'/app/pagination-model.php';
 
 use LiteBBS\Framework\Container;
 use LiteBBS\Framework\Kernel;
@@ -13,6 +14,7 @@ use LiteBBS\Framework\Router;
 use LiteBBS\Application\PasswordPolicy;
 use LiteBBS\Application\FeedCursor;
 use LiteBBS\Application\TopicCursor;
+use LiteBBS\Application\Pagination;
 
 function assert_same(mixed $expected, mixed $actual, string $message): void
 {
@@ -46,8 +48,10 @@ assert_same(true, PasswordPolicy::accepts('123456789012'), 'Password policy must
 assert_same(false, PasswordPolicy::accepts('12345'), 'Password policy must reject passwords below six characters.');
 assert_same(false, PasswordPolicy::accepts('1234567890123'), 'Password policy must reject passwords above twelve characters.');
 
-$cursor = FeedCursor::fromTopic(['is_pinned'=>'1', 'last_post_at'=>'2026-11-24 10:20:30.123456', 'id'=>'42']);
-assert_same(['p'=>1, 'd'=>'2026-11-24 10:20:30.123456', 'i'=>42], FeedCursor::decode($cursor), 'Feed cursor must preserve pagination fields.');
+$cursor = FeedCursor::fromTopic(['is_pinned'=>'1', 'last_post_at'=>'2026-11-24 10:20:30.123456', 'id'=>'42'], 3);
+assert_same(['p'=>1, 'd'=>'2026-11-24 10:20:30.123456', 'i'=>42, 'n'=>3], FeedCursor::decode($cursor), 'Feed cursor must preserve pagination fields.');
+$legacyCursor = rtrim(strtr(base64_encode('{"p":1,"d":"2026-11-24 10:20:30.123456","i":42}'), '+/', '-_'), '=');
+assert_same(['p'=>1, 'd'=>'2026-11-24 10:20:30.123456', 'i'=>42, 'n'=>2], FeedCursor::decode($legacyCursor), 'Feed cursor must retain compatibility with existing next-page URLs.');
 foreach ([['invalid'], str_repeat('a', 257), base64_encode('{"p":1,"d":"2026-11-24 10:20:30","i":"42"}')] as $invalidCursor) {
     $rejected = false;
     try {
@@ -65,5 +69,11 @@ assert_same(false, $topicCursor->accepts($signature, 7, 100, 20, 2, 32), 'Deleti
 assert_same(false, $topicCursor->accepts($signature, 7, 100, 20, 1, 33), 'A newly committed reply must invalidate older floor cursors.');
 assert_same(false, $topicCursor->accepts($signature, 7, 100, 21, 1, 32), 'Changing the floor must invalidate the signature.');
 assert_same(false, $topicCursor->accepts($signature, 8, 100, 20, 1, 32), 'A cursor must be bound to the topic.');
+
+$pagination = Pagination::forView(2, 120, 20, '/', '/forum');
+assert_same(6, $pagination['page_count'], 'Pagination must calculate total pages from item counts.');
+assert_same(2, $pagination['current_page'], 'Pagination must retain the current page.');
+assert_same(6, count($pagination['pages']), 'Pagination must expose all pages for short result sets.');
+assert_same('/forum-3', $pagination['pages'][2]['url'], 'Pagination must expose clean numeric page URLs.');
 
 echo "Framework tests passed.\n";

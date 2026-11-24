@@ -5,7 +5,7 @@ namespace LiteBBS\Application;
 
 final class FeedCursor
 {
-    /** @return array{p: int, d: string, i: int} */
+    /** @return array{p: int, d: string, i: int, n: int} */
     public static function decode(mixed $value): array
     {
         if (!is_string($value) || strlen($value) > 256) {
@@ -21,15 +21,21 @@ final class FeedCursor
             throw new \InvalidArgumentException('Invalid feed cursor.');
         }
 
-        return ['p' => $data['p'], 'd' => $data['d'], 'i' => $data['i']];
+        $page = $data['n'] ?? 2;
+        if (!is_int($page) || $page < 2 || $page > 1000000) {
+            throw new \InvalidArgumentException('Invalid feed cursor.');
+        }
+
+        return ['p' => $data['p'], 'd' => $data['d'], 'i' => $data['i'], 'n' => $page];
     }
 
-    public static function fromTopic(array $topic): string
+    public static function fromTopic(array $topic, int $page = 2): string
     {
         $data = json_encode([
             'p' => (int)$topic['is_pinned'],
             'd' => (string)$topic['last_post_at'],
             'i' => (int)$topic['id'],
+            'n' => max(2, $page),
         ], JSON_THROW_ON_ERROR);
 
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');

@@ -39,7 +39,7 @@ function zip_attachment_preload(array $view): void
     if (!$ids) return;
     $marks = implode(',', array_fill(0, count($ids), '?'));
     $cache =& zip_attachment_request_cache();
-    foreach (h('SELECT * FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active" ORDER BY id', $ids)->fetchAll() as $file) $cache['files'][(int)$file['post_id']][] = $file;
+    foreach (h('SELECT id,post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,status,created_at FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active" ORDER BY id', $ids)->fetchAll() as $file) $cache['files'][(int)$file['post_id']][] = $file;
     if ($viewer) foreach (h('SELECT attachment_id FROM plg_zip_remote_attachments_grants WHERE user_id=? AND attachment_id IN (SELECT id FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active")', array_merge([(int)$viewer['id']], $ids))->fetchAll(PDO::FETCH_COLUMN) as $attachmentId) $cache['grants'][(int)$attachmentId] = true;
 }
 

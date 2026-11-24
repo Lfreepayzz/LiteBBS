@@ -170,7 +170,7 @@ function request_observe(\LiteBBS\Framework\Request $request, int $status, float
     $state =& request_cache_state();
     $slowMilliseconds = max(1, (int)(getenv('LITEBBS_SLOW_REQUEST_MS') ?: 300));
     if ($status < 400 && $duration < $slowMilliseconds) return;
-    error_log('request method='.$request->method.' path='.$request->path.' status='.$status.' duration_ms='.$duration.' sql_count='.(int)($state['@sql-count'] ?? 0).' sql_ms='.round((float)($state['@sql-ms'] ?? 0), 1));
+    error_log('request method='.$request->method.' path='.$request->path.' status='.$status.' duration_ms='.$duration.' sql_count='.(int)($state['@sql-count'] ?? 0).' sql_ms='.round((float)($state['@sql-ms'] ?? 0), 1).' cache_wait_ms='.round((float)($state['@cache-wait-ms'] ?? 0), 1));
 }
 function asset_version(string $file): string { static $versions=[];if(isset($versions[$file]))return $versions[$file];$modified=@filemtime($file);$size=@filesize($file);if($modified===false||$size===false)throw new RuntimeException('Asset is unavailable.');$key='asset-version:v1:'.hash('sha256',$file.'|'.$modified.'|'.$size);$value=cached($key,86400,static function()use($file):array{$hash=hash_file('sha256',$file);if($hash===false)throw new RuntimeException('Cannot hash asset.');return [substr($hash,0,12)];});return $versions[$file]=(string)($value[0]??''); }
 function redis_cache_client(): ?Redis {
@@ -237,13 +237,14 @@ function page_cache_read(string $key, int $ttl): ?array {
     if (isset($state[$stateKey])) return null;
     $redisConfigured=(getenv('LITEBBS_REDIS_HOST')?:'')!=='';$redis=redis_cache_client();
     if($redisConfigured&&!$redis)return null;
+    $contended = false;
     if ($redis) {
         $lockKey = shared_cache_key('page-lock:'.$key);
         $token = bin2hex(random_bytes(16));
         try {
             if ($redis->set($lockKey, $token, ['nx','ex'=>10])) {
                 $state[$stateKey] = ['redis'=>$redis, 'key'=>$lockKey, 'token'=>$token];
-            }
+            } else $contended = true;
         } catch (Throwable $error) {
             cache_error('page cache single-flight failed: '.$error->getMessage());
         }
@@ -253,10 +254,30 @@ function page_cache_read(string $key, int $ttl): ?array {
         $lock = @fopen(cache_lock_path($key), 'c');
         if (!$lock) return null;
         if (flock($lock, LOCK_EX | LOCK_NB)) $state[$stateKey] = ['file'=>$lock];
-        else fclose($lock);
+        else { fclose($lock); $contended = true; }
     }
 
     if (isset($state[$stateKey])) page_cache_register_shutdown();
+    if ($contended) {
+        // Give the single-flight owner a bounded opportunity to publish before
+        // falling back to the loader. This avoids a cold-cache burst sending
+        // every concurrent request through the same database query.
+        $waitMilliseconds = (int)(getenv('LITEBBS_PAGE_CACHE_WAIT_MS') ?: 50);
+        $waitMilliseconds = max(0, min(200, $waitMilliseconds));
+        $deadline = hrtime(true) + ($waitMilliseconds * 1000000);
+        $waitStartedAt = hrtime(true);
+        do {
+            $remaining = $deadline - hrtime(true);
+            if ($remaining <= 0) break;
+            usleep((int)min(10000, max(1000, intdiv($remaining, 1000))));
+            $value = read_cache($key, $ttl);
+            if ($value !== null) {
+                $state['@cache-wait-ms'] = (float)($state['@cache-wait-ms'] ?? 0) + (hrtime(true) - $waitStartedAt) / 1e6;
+                return $value;
+            }
+        } while (hrtime(true) < $deadline);
+        $state['@cache-wait-ms'] = (float)($state['@cache-wait-ms'] ?? 0) + (hrtime(true) - $waitStartedAt) / 1e6;
+    }
     $value = read_cache($key, $ttl);
     if ($value !== null && isset($state[$stateKey])) page_cache_release($stateKey);
     return $value;
@@ -611,11 +632,29 @@ function cache_versions(array $keys): array
     if (!$missing) return $versions;
 
     $values = [];
-    if ($redis = redis_cache_client()) {
+    $redis = redis_cache_client();
+    if ($redis) {
         try {
             $sharedKeys = array_map(static fn(string $key): string => shared_cache_key('@version:'.$key), $missing);
             $values = $redis->mGet($sharedKeys);
             if (!is_array($values)) throw new RuntimeException('Unexpected Redis MGET response.');
+
+            // Version keys have no TTL. Initialize only absent keys from the
+            // local fallback, so regular Redis-backed reads avoid one file read
+            // per cache dependency.
+            $absent = [];
+            foreach ($missing as $index => $key) {
+                if (!is_numeric($values[$index] ?? null) || (int)$values[$index] < 1) $absent[$index] = $key;
+            }
+            if ($absent) {
+                $pipeline = $redis->multi(Redis::PIPELINE);
+                foreach ($absent as $index => $key) $pipeline->setNx($sharedKeys[$index], (string)local_cache_version($key));
+                $pipeline->mGet(array_values(array_intersect_key($sharedKeys, $absent)));
+                $result = $pipeline->exec();
+                $initialized = $result[count($absent)] ?? null;
+                if (!is_array($initialized)) throw new RuntimeException('Unexpected Redis version initialization response.');
+                foreach (array_keys($absent) as $position => $index) $values[$index] = $initialized[$position] ?? null;
+            }
         } catch (Throwable $error) {
             $values = [];
             $state['@redis-failed'] = true;
@@ -623,7 +662,10 @@ function cache_versions(array $keys): array
         }
     }
     foreach ($missing as $index => $key) {
-        $version = max(local_cache_version($key), (int)($values[$index] ?? 1));
+        $sharedVersion = $values[$index] ?? null;
+        $version = is_numeric($sharedVersion) && (int)$sharedVersion > 0
+            ? (int)$sharedVersion
+            : local_cache_version($key);
         $state['@version:'.$key] = ['expires'=>PHP_INT_MAX, 'value'=>$version];
         $versions[$key] = $version;
     }

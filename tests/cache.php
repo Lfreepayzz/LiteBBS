@@ -26,6 +26,7 @@ try {
     if (cached($first, 60, static fn(): array => ['fallback']) !== ['fallback']) throw new RuntimeException('Contended read did not use its loader.');
     page_cache_write($first, ['unexpected'], 60);
     if (read_cache($first, 60) !== null) throw new RuntimeException('A request without the lock published a cache entry.');
+    if ((float)($state['@cache-wait-ms'] ?? 0) <= 0) throw new RuntimeException('Contended cache reads must record bounded wait time.');
 
     invalidate($key);
     $version = cache_version($key);

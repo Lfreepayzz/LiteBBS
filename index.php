@@ -11,6 +11,7 @@ require __DIR__.'/app/theme-runtime.php';
 require __DIR__.'/app/outbox.php';
 require __DIR__.'/app/application-routes.php';
 require __DIR__.'/app/feed-cursor.php';
+require __DIR__.'/app/pagination-model.php';
 
 if (!extension_loaded('mbstring')) { http_response_code(500); exit('LiteBBS requires the mbstring extension.'); }
 ini_set('display_errors', '0');
@@ -102,9 +103,10 @@ $kernel->router->add('GET', '~^/sitemap-topics-(?P<page>[1-9][0-9]*)\.xml$~', st
 });
 $kernel->router->add('GET', '~^/(?:forum-(?:[2-9]|[1-9][0-9]+))?$~', static function (\LiteBBS\Framework\Request $request): \LiteBBS\Framework\Response {
     $legacyNumbered = $request->path !== '/';
+    $numberedPage = $legacyNumbered ? (int)substr($request->path, 7) : 1;
     if ($legacyNumbered && $request->query) fail(400, '分页参数无效');
-    if ($legacyNumbered && $request->path !== '/forum-2') redirect('/', 302);
-    $cursor = $request->query['cursor'] ?? '';
+    $cursor = $legacyNumbered ? \LiteBBS\Application\NumericPageCursor::feed($numberedPage, theme_page_size((string)(load_config()['theme'] ?? 'default'), 'home')) : ($request->query['cursor'] ?? '');
+    if ($legacyNumbered && $cursor === '') fail(404, '页面不存在');
     if (array_key_exists('page', $request->query)) fail(400,'主题列表仅支持游标翻页。');
     try {
         $cursorData = $cursor === '' ? null : \LiteBBS\Application\FeedCursor::decode($cursor);
@@ -124,7 +126,7 @@ $kernel->router->add('GET', '~^/(?:forum-(?:[2-9]|[1-9][0-9]+))?$~', static func
         json_encode($config['seo']??[], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?: '',
     ]));
     $pageCacheKey='home-page:v9:'.$pageSize.':'.hash('sha256',$cursor).':'.$shellVersion.':'.(int)$versions['topics'].':'.(int)$versions['categories'].':'.(int)$versions['home-feed'].':'.(int)$versions['extension-read-pages'].':'.(int)$versions['plugins'].':'.(int)$versions['theme-settings:'.$theme];
-    if(!$legacyNumbered&&$anonymous&&($cachedPage=page_cache_read($pageCacheKey,120))!==null){
+    if($anonymous&&($cachedPage=page_cache_read($pageCacheKey,120))!==null){
         return new \LiteBBS\Framework\Response((string)($cachedPage[0]??''));
     }
     $key='home:v7:'.$pageSize.':'.hash('sha256',$cursor).':'.(int)$versions['home-feed'].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'];
@@ -144,13 +146,9 @@ $kernel->router->add('GET', '~^/(?:forum-(?:[2-9]|[1-9][0-9]+))?$~', static func
     $nextCursor = '';
     if ($hasMore) {
         array_pop($rows);
-        $nextCursor = \LiteBBS\Application\FeedCursor::fromTopic(end($rows));
+        $nextCursor = \LiteBBS\Application\FeedCursor::fromTopic(end($rows), ($cursorData['n'] ?? 1) + 1);
     }
-    $nextUrl = $nextCursor !== '' ? '/?cursor='.rawurlencode($nextCursor) : '';
-    if ($legacyNumbered) {
-        if ($nextUrl === '') fail(404, '页面不存在');
-        redirect($nextUrl, 302);
-    }
+    $nextUrl = $nextCursor !== '' ? '/forum-'.(($cursorData['n'] ?? 1) + 1) : '';
     $viewer=$anonymous?null:current_user();
     $homeView = ['topics'=>$rows,'viewer'=>$viewer,'next_cursor'=>$nextCursor];
     // Keep the exact total available to plugins that consume the home feed slots.
@@ -163,7 +161,9 @@ $kernel->router->add('GET', '~^/(?:forum-(?:[2-9]|[1-9][0-9]+))?$~', static func
     $body='<header class="home-heading"><div><h1>讨论</h1></div>'.($viewer?'<a class="feed-create" href="/new">发布主题</a>':'<a class="feed-create" href="/login">登录</a>').'</header>'.extension_slot('home.feed.before',$homeView).'<section class="topic-feed" aria-label="主题列表">';
     if(!$rows)$body.='<div class="topic-empty"><h2>暂无主题</h2><a href="'.($viewer?'/new':'/login').'">'.($viewer?'发布主题':'登录后发布').' →</a></div>';
     foreach($rows as $topic){$created=(string)$topic['created_at'];$replied=(string)$topic['reply_created_at'];$body.='<article class="topic topic-feed-item'.($topic['is_pinned']?' is-pinned':'').'">'.'<span class="topic-avatar" aria-hidden="true">'.e(text_slice($topic['username'],0,1)).'</span><div class="topic-feed-main"><h2><a href="/t/'.(int)$topic['id'].'">'.e($topic['title']).'</a></h2><div class="topic-feed-meta"><a class="topic-category" href="/c/'.(int)$topic['category_id'].'">'.e($topic['category']).'</a>'.($topic['is_pinned']?'<span class="topic-pinned">置顶</span>':'').'<a class="topic-author" href="/u/'.rawurlencode($topic['username']).'">'.e($topic['username']).'</a><span class="topic-views" aria-label="'.(int)$topic['view_count'].' 次浏览"><i aria-hidden="true"></i>'.(int)$topic['view_count'].'</span><time class="topic-created" datetime="'.e(str_replace(' ','T',substr($created,0,19))).'">'.e(substr($created,0,16)).'</time>'.((int)$topic['reply_count']>0?'<a class="topic-reply-author" href="/u/'.rawurlencode((string)$topic['reply_username']).'">'.e((string)$topic['reply_username']).'</a><span class="topic-activity">回复</span><time class="topic-replied" datetime="'.e(str_replace(' ','T',substr($replied,0,19))).'">'.e(substr($replied,0,16)).'</time>':'').'</div></div><a class="topic-replies" href="/t/'.(int)$topic['id'].'#replies" aria-label="'.(int)$topic['reply_count'].' 条回复"><strong>'.(int)$topic['reply_count'].'</strong><span>回复</span></a></article>';}
-    $body.='</section>'.extension_slot('home.feed.after',$homeView).theme_render_standard('pagination',['pagination'=>['context'=>'home','page_size'=>$pageSize,'first_url'=>'/','current_cursor'=>$cursor,'next_cursor'=>$nextCursor,'has_more'=>$hasMore,'next_url'=>$nextUrl]],__DIR__.'/app/pagination.php');
+    $pagination = ['context'=>'home','page_size'=>$pageSize,'first_url'=>'/','current_cursor'=>$cursor,'next_cursor'=>$nextCursor,'has_more'=>$hasMore,'next_url'=>$nextUrl];
+    $pagination += \LiteBBS\Application\Pagination::forView($cursorData['n'] ?? 1, cached_topic_count('all'), $pageSize, '/', '/forum');
+    $body.='</section>'.extension_slot('home.feed.after',$homeView).theme_render_standard('pagination',['pagination'=>$pagination],__DIR__.'/app/pagination.php');
     ob_start();
     page($cursor === '' ? '首页' : '更多讨论', $body, '最新社区讨论', true);
     $html=(string)ob_get_clean();
@@ -183,6 +183,7 @@ if ($frameworkResponse instanceof \LiteBBS\Framework\Response) {
     if (isset($requestState['@db-connect-ms'])) $requestTimings['db'] = round((float)$requestState['@db-connect-ms'], 1);
     if (isset($requestState['@sql-ms'])) $requestTimings['sql'] = round((float)$requestState['@sql-ms'], 1);
     if (isset($requestState['@sql-count'])) $requestTimings['queries'] = (float)$requestState['@sql-count'];
+    if (isset($requestState['@cache-wait-ms'])) $requestTimings['cache_wait'] = round((float)$requestState['@cache-wait-ms'], 1);
     if (!headers_sent() && getenv('LITEBBS_DEBUG_TIMING') === '1') header('Server-Timing: '.implode(', ', array_map(static fn(string $name, float $duration): string => $name.';dur='.$duration, array_keys($requestTimings), $requestTimings)));
     $frameworkResponse->send(); exit;
 }
