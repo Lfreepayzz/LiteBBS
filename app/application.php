@@ -107,6 +107,114 @@ final class AccountRegistrationService
     }
 }
 
+/** Owns the small, asynchronous write made after a visitor has opened a topic. */
+final class TopicViewService
+{
+    public function record(int $topicId): ?int
+    {
+        if (!$this->isNewVisit($topicId)) {
+            return $this->current($topicId);
+        }
+
+        $updated = \h(
+            'UPDATE topics AS t JOIN categories AS c ON c.id=t.category_id SET t.view_count=t.view_count+1 WHERE t.id=? AND t.status="normal" AND c.is_visible=1',
+            [$topicId]
+        )->rowCount();
+        if ($updated !== 1) {
+            return null;
+        }
+
+        // The home feed embeds view counts in its cached HTML and row cache.
+        // Invalidate only after a deduplicated, successful increment.
+        \invalidate('topic:'.$topicId);
+        \invalidate('home-feed');
+        return $this->current($topicId);
+    }
+
+    private function isNewVisit(int $topicId): bool
+    {
+        $redis = \redis_cache_client();
+        if ($redis) {
+            try {
+                $viewer = \current_user();
+                $identity = $viewer ? 'user:'.(int)$viewer['id'] : 'ip:'.hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? ''));
+                return (bool)$redis->set(\shared_cache_key('topic-view-seen:'.$topicId.':'.$identity), '1', ['nx', 'ex'=>60]);
+            } catch (Throwable $error) {
+                \cache_error('topic view deduplication failed: '.$error->getMessage());
+            }
+        }
+        return \anonymous_topic_view_is_new($topicId);
+    }
+
+    private function current(int $topicId): ?int
+    {
+        $views = \h(
+            'SELECT t.view_count FROM topics AS t JOIN categories AS c ON c.id=t.category_id WHERE t.id=? AND t.status="normal" AND c.is_visible=1',
+            [$topicId]
+        )->fetchColumn();
+        return $views === false ? null : (int)$views;
+    }
+
+    public function read(array $topicIds): array
+    {
+        if (!$topicIds) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($topicIds), '?'));
+        $rows = \h(
+            'SELECT t.id,t.view_count FROM topics AS t JOIN categories AS c ON c.id=t.category_id WHERE t.id IN ('.$placeholders.') AND t.status="normal" AND c.is_visible=1',
+            $topicIds
+        )->fetchAll();
+        $views = [];
+        foreach ($rows as $row) {
+            $views[(int)$row['id']] = (int)$row['view_count'];
+        }
+        return $views;
+    }
+}
+
+final class TopicViewController
+{
+    public function __construct(private TopicViewService $views = new TopicViewService())
+    {
+    }
+
+    public function __invoke(Request $request, Container $container, array $params): Response
+    {
+        $topicId = (int)($params['topicId'] ?? 0);
+        if ($topicId < 1) {
+            return new Response('', 404);
+        }
+
+        $views = $this->views->record($topicId);
+        if ($views === null) {
+            return new Response('', 404);
+        }
+        return (new Response())->json(['views'=>$views])->header('Cache-Control', 'no-store');
+    }
+
+    public function list(Request $request): Response
+    {
+        $rawIds = $request->query['ids'] ?? '';
+        if (!is_string($rawIds)) {
+            return new Response('', 400);
+        }
+        $topicIds = [];
+        foreach (explode(',', $rawIds) as $rawId) {
+            if (!ctype_digit($rawId) || (int)$rawId < 1) {
+                return new Response('', 400);
+            }
+            $topicIds[(int)$rawId] = (int)$rawId;
+        }
+        $topicIds = array_values($topicIds);
+        if (!$topicIds || count($topicIds) > 100) {
+            return new Response('', 400);
+        }
+        return (new Response())->json(['views'=>$this->views->read($topicIds)])->header('Cache-Control', 'no-store');
+    }
+}
+
 final class AccountRegistrationController
 {
     public function __construct(private AccountRegistrationService $registration = new AccountRegistrationService())
