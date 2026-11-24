@@ -70,12 +70,7 @@ if ($path==='/admin/extensions'&&in_array($method,['GET','POST'],true)) {
             $local=program_update_local_files();
             $changed=[];
             foreach($remote['files'] as $file=>$sha) if (($local[$file]??null)!==$sha) $changed[]=$file;
-            $state=program_update_state();
-            $downloaded=is_array($state)
-                && ($state['status']??'')==='downloaded'
-                && ($state['version']??'')===$remote['version']
-                && is_file(program_update_package());
-            echo json_encode(['ok'=>true,'version'=>$remote['version'],'files'=>$changed,'downloaded'=>$downloaded],JSON_UNESCAPED_UNICODE);
+            echo json_encode(['ok'=>true,'version'=>$remote['version'],'files'=>$changed],JSON_UNESCAPED_UNICODE);
         } catch(Throwable $error) { http_response_code(502); echo json_encode(['ok'=>false,'error'=>$error->getMessage()],JSON_UNESCAPED_UNICODE); }
         return;
     }
@@ -98,13 +93,10 @@ if ($path==='/admin/extensions'&&in_array($method,['GET','POST'],true)) {
         }
         if($action==='download') {
             $lock=program_update_lock();
-            try { $remote=program_update_remote(); $target=program_update_package(); $tmp=$target.'.tmp'; program_update_download($remote['archive'],$tmp); if(!@rename($tmp,$target)){@unlink($tmp);throw new RuntimeException('更新包保存失败');} program_update_state(['status'=>'downloaded','version'=>$remote['version'],'files'=>count($remote['files']),'sha256'=>hash_file('sha256',$target)]); redirect('/admin/extensions'); }
+            try { @set_time_limit(0); $remote=program_update_remote();$local=program_update_local_files();$changed=[];foreach($remote['files'] as $file=>$sha)if(($local[$file]??null)!==$sha)$changed[$file]=$sha;$updated=program_update_apply($remote,$changed);program_update_state(['status'=>'applied','version'=>$remote['version'],'files'=>$updated,'applied_at'=>gmdate('c')]);audit('program.updated','program',null,['version'=>$remote['version'],'files'=>$updated]);redirect('/admin/extensions?program_updated='.$updated); }
             catch (\LiteBBS\Framework\ResponseHalt $halt) { throw $halt; }
-            catch(Throwable $error){@unlink(program_update_package().'.tmp');fail(502,'更新包下载失败：'.$error->getMessage());}
+            catch(Throwable $error){fail(502,'在线更新失败：'.$error->getMessage());}
             finally { fclose($lock); }
-        }
-        if($action==='apply') {
-            fail(403,'网页覆盖更新已禁用。请通过部署流程安装经过验证的版本。');
         }
         if($action==='migrate_database') {
             try {
@@ -119,8 +111,6 @@ if ($path==='/admin/extensions'&&in_array($method,['GET','POST'],true)) {
         }
         fail(400,'扩展操作无效');
     }
-    $state=program_update_state();
-    $ready=is_array($state)&&($state['status']??'')==='downloaded'&&is_file(program_update_package());
     $databaseReport=database_maintenance_report();
     $databaseCurrent=$databaseReport['ready'];
     $csrf = e(csrf());
@@ -139,16 +129,17 @@ if ($path==='/admin/extensions'&&in_array($method,['GET','POST'],true)) {
              .'<form method="post" class="database-upgrade-form"><input type="hidden" name="csrf" value="'.$csrf.'"><input type="hidden" name="action" value="migrate_database"><button class="primary" type="submit"'.($databaseCurrent ? ' disabled' : '').'>立即升级数据库结构</button></form>'
             .'<p>表重建和碎片整理属于高负载维护操作，请在维护窗口由运维人员通过数据库工具执行。</p>';
     if($databaseReport['legacy_tables'])$databaseContent.='<p>检测到已迁移的旧附件表：'.e(implode('、',$databaseReport['legacy_tables'])).'。确认新表数据无误后再执行清理。</p><form method="post"><input type="hidden" name="csrf" value="'.$csrf.'"><input type="hidden" name="action" value="cleanup_legacy_database"><button type="submit">清理残留数据库表</button></form>';
-    $status = $ready ? '已下载更新包，等待通过部署流程安装（GitHub 文件树 '.e((string)($state['version'] ?? '')).'）。' : '尚未检查更新。';
+    $updatedResult=isset($query['program_updated'])&&is_string($query['program_updated'])&&ctype_digit($query['program_updated'])?'已安装 '.$query['program_updated'].' 个程序文件。':'';
+    $status = $updatedResult!=='' ? $updatedResult : '尚未检查更新。';
     $body = '<div class="program-update-page">'
         .'<section class="program-update-panel" aria-labelledby="program-update-heading">'
         .'<h2 id="program-update-heading">程序文件</h2>'
         .'<div class="program-update-panel-body" id="program-update">'
         .'<dl class="program-update-info"><div><dt>核心版本</dt><dd><code>'.e(LITEBBS_VERSION).'</code></dd></div>'
         .'<div><dt>更新源</dt><dd><a href="https://github.com/'.e(program_update_repository()).'">GitHub <code>'.e(program_update_repository()).'</code></a></dd></div></dl>'
-        .'<p>可查看文件差异并下载更新包。网页覆盖更新已禁用；下载不会修改程序文件，请通过部署流程安装经过验证的版本。</p>'
+        .'<p>可查看文件差异并立即在线更新。更新会从 GitHub 逐个下载、校验并直接覆盖有差异的程序文件。</p>'
         .'<input type="hidden" id="program-update-csrf" value="'.$csrf.'">'
-        .'<p id="program-update-status" class="program-update-notice" data-state="'.($ready ? 'success' : 'idle').'" role="status" aria-atomic="true">'.$status.'</p>'
+        .'<p id="program-update-status" class="program-update-notice" data-state="'.($updatedResult!=='' ? 'success' : 'idle').'" role="status" aria-atomic="true">'.$status.'</p>'
         .'<progress id="program-update-progress" max="100" aria-label="程序更新进度" hidden></progress>'
         .'<div class="program-update-actions"><button type="button" class="primary" id="program-update-check">检查更新</button></div>'
         .'<div id="program-update-files"></div></div></section>'
@@ -202,7 +193,6 @@ function market_package_hash_valid(string $file, string $expectedHash): bool {
     $result=cached($key,300,static function()use($file,$expectedHash):array{$hash=hash_file('sha256',$file);return [$hash!==false&&hash_equals(strtolower($expectedHash),strtolower($hash))];});
     return !empty($result[0]);
 }
-function program_update_package(): string { return config_directory().'/program-update.zip'; }
 function program_update_lock() {
     $file=config_directory().'/program-update.lock';$handle=@fopen($file,'c');if(!$handle||!flock($handle,LOCK_EX|LOCK_NB)){if($handle)fclose($handle);throw new RuntimeException('已有另一个更新任务正在执行');}return $handle;
 }
@@ -223,7 +213,7 @@ function program_update_remote(): array {
     if(!is_array($tree)||!isset($tree['sha'],$tree['tree'])||!is_array($tree['tree']))throw new RuntimeException('GitHub 更新清单无效');
     $files=[];foreach($tree['tree'] as $item){$path=(string)($item['path']??'');if(($item['type']??'')!=='blob'||!program_update_path_allowed($path))continue;$sha=(string)($item['sha']??'');if(!preg_match('/^[a-f0-9]{40}$/',$sha))throw new RuntimeException('GitHub 文件哈希无效');$files[$path]=$sha;}
     if(!$files)throw new RuntimeException('GitHub 更新清单为空');
-    return ['version'=>(string)$tree['sha'],'files'=>$files,'archive'=>'https://github.com/'.$repository.'/archive/'.rawurlencode((string)$tree['sha']).'.zip'];
+    return ['version'=>(string)$tree['sha'],'files'=>$files,'raw_base'=>'https://raw.githubusercontent.com/'.$repository.'/'.rawurlencode((string)$tree['sha']).'/'];
 }
 function program_update_path_allowed(string $path): bool {
     if($path===''||strpos($path,'\\')!==false||preg_match('~(^/|^[A-Za-z]:|(^|/)\.\.?(/|$))~',$path))return false;
@@ -233,8 +223,10 @@ function program_update_path_allowed(string $path): bool {
 function program_update_local_files(): array {
     $root=program_update_root();$files=[];$walk=function(string $dir,string $prefix)use(&$walk,&$files,$root):void{foreach(scandir($dir)?:[] as $name){if($name==='.'||$name==='..')continue;$relative=$prefix.$name;$full=$dir.'/'.$name;if(is_dir($full)){if(in_array($relative,['private','uploads','cache','market-packages','.git'],true))continue;$walk($full,$relative.'/');continue;}if(is_file($full)&&program_update_path_allowed($relative)){$data=@file_get_contents($full);if($data!==false)$files[$relative]=sha1('blob '.strlen($data)."\0".$data);}}};$walk($root,'');return $files;
 }
-function program_update_download(string $url,string $target): void {
-    $in=@fopen($url,'rb',false,stream_context_create(['http'=>['timeout'=>60,'follow_location'=>1,'header'=>"User-Agent: LiteBBS-updater\r\n"]]));if(!$in)throw new RuntimeException('无法下载 GitHub 更新包');$out=@fopen($target,'wb');if(!$out){fclose($in);throw new RuntimeException('无法创建更新临时文件');}$total=0;while(!feof($in)){$chunk=fread($in,1048576);if($chunk===false){fclose($in);fclose($out);throw new RuntimeException('更新包读取失败');}$total+=strlen($chunk);if($total>104857600){fclose($in);fclose($out);@unlink($target);throw new RuntimeException('更新包超过 100 MiB 限制');}fwrite($out,$chunk);}fclose($in);fclose($out);if($total<100)throw new RuntimeException('更新包为空');
+function program_update_apply(array $remote,array $changed): int {
+    $root=program_update_root();$updated=0;
+    foreach($changed as $relative=>$sha){if(!program_update_path_allowed($relative)||!preg_match('/^[a-f0-9]{40}$/',$sha))throw new RuntimeException('更新文件清单无效');$data=program_update_http((string)$remote['raw_base'].implode('/',array_map('rawurlencode',explode('/',$relative))));if(!hash_equals($sha,sha1('blob '.strlen($data)."\0".$data)))throw new RuntimeException('更新文件校验失败：'.$relative);$destination=$root.'/'.$relative;if(is_link($destination))throw new RuntimeException('拒绝覆盖符号链接：'.$relative);$parent=dirname($destination);if(!is_dir($parent)&&!@mkdir($parent,0750,true))throw new RuntimeException('无法创建程序目录：'.$relative);$temporary=$destination.'.'.bin2hex(random_bytes(6)).'.tmp';if(@file_put_contents($temporary,$data,LOCK_EX)===false||!@rename($temporary,$destination)){@unlink($temporary);throw new RuntimeException('无法覆盖文件：'.$relative);}$updated++;}
+    return $updated;
 }
 
 function market_signing_key(): string {
