@@ -1,5 +1,5 @@
 
-基于 PHP 和 MySQL 轻量论坛程序，提供主题与回复、分区管理、内容审核、审计日志、主题和插件扩展能力。
+LiteBBS基于 PHP 和 MySQL 轻量论坛程序，提供主题与回复、分区管理、内容审核、审计日志、主题和插件扩展能力。
 
 ## 演示
 
@@ -15,11 +15,11 @@
 
 ## 截图
 
-![LiteBLOG Screenshot 1](https://raw.githubusercontent.com/Lfreepayzz/LiteBLOG/refs/heads/main/img/1.png)
+![LiteBBS Screenshot 1](https://raw.githubusercontent.com/Lfreepayzz/LiteBBS/refs/heads/main/img/1.png)
 
-![LiteBLOG Screenshot 2](https://raw.githubusercontent.com/Lfreepayzz/LiteBLOG/refs/heads/main/img/2.png)
+![LiteBBS Screenshot 2](https://raw.githubusercontent.com/Lfreepayzz/LiteBBS/refs/heads/main/img/2.png)
 
-
+![LiteBBS Screenshot 2](https://raw.githubusercontent.com/Lfreepayzz/LiteBBS/refs/heads/main/img/3.png)
 
 ## 功能
 
