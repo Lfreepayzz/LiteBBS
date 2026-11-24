@@ -586,9 +586,8 @@ function anonymous_topic_view_is_new(int $topicId): bool {
     arsort($seen, SORT_NUMERIC);
     $seen = array_slice($seen, 0, 20, true);
     $value = implode(',', array_map(static fn(int $id, int $expiresAt): string => $id.':'.$expiresAt, array_keys($seen), $seen));
-    // Keep this anonymous view-deduplication cookie off listing routes so it
-    // does not fragment their public cache variants.
-    setcookie('lbbs_topic_views', $value, ['expires'=>$now + 60, 'path'=>'/t/', 'secure'=>request_is_https(), 'httponly'=>true, 'samesite'=>'Lax']);
+    // The asynchronous view endpoint also needs this cookie on /topic-views.
+    setcookie('lbbs_topic_views', $value, ['expires'=>$now + 60, 'path'=>'/', 'secure'=>request_is_https(), 'httponly'=>true, 'samesite'=>'Lax']);
     return true;
 }
 function count_topic_view(int $id): void { $increment=static function()use($id):void{$redis=redis_cache_client();if($redis){$redis->hIncrBy(shared_cache_key('topic-views'),(string)$id,1);return;}$dir=dirname(__DIR__).'/cache/topic-views';if(!is_dir($dir)&&!@mkdir($dir,0700,true)&&!is_dir($dir)){cache_error('topic view cache is unavailable');return;}$path=$dir.'/'.$id.'.cache';if(@file_put_contents($path,'x',FILE_APPEND|LOCK_EX)===false)cache_error('topic view cache write failed');};$redis=redis_cache_client();if($redis){try{$viewer=current_user();$identity=$viewer?'user:'.(int)$viewer['id']:'ip:'.hash('sha256',(string)($_SERVER['REMOTE_ADDR']??''));$seen=shared_cache_key('topic-view-seen:'.$id.':'.$identity);if($redis->set($seen,'1',['nx','ex'=>60]))$increment();return;}catch(Throwable $error){cache_error('topic view increment failed: '.$error->getMessage());}}if(!anonymous_topic_view_is_new($id))return;$increment(); }
