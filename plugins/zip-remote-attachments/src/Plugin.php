@@ -17,10 +17,10 @@ final class ZipRemoteAttachmentsPlugin implements LiteBBSPlugin
         $context->routes()->front('GET', '~^/attachments/download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response { return zip_attachment_download((int)$params['id']); }, ['auth'=>'user']);
         $context->routes()->front('POST', '~^/attachments/unlock/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
             return zip_attachment_unlock((int)$params['id']);
-        }, ['auth'=>'user']);
+        }, ['auth'=>'user', 'csrf'=>true]);
         $context->routes()->front('POST', '~^/attachments/external-download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
             return zip_attachment_external_download((int)$params['id']);
-        }, ['auth'=>'user']);
+        }, ['auth'=>'user', 'csrf'=>true]);
     }
 }
 

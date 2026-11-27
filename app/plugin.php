@@ -87,7 +87,18 @@ function extension_v2_entry_file(string $directory, string $entry): ?string {
 }
 
 function extension_validate_migration_source(string $source, string $relative, string $prefix): void {
-    // This is a conservative naming check in addition to PHP preflight, not a sandbox.
+    // Declarative migration guard: only literal SQL arrays reach schema execution.
+    // This prevents code from changing schema before the SQL ownership checks run.
+    foreach (token_get_all($source) as $token) {
+        if (!is_array($token)) {
+            if (!in_array($token, ['(', ')', '=', ';', '[', ']', ','], true)) throw new RuntimeException($relative.' 迁移只能返回 SQL 字符串数组');
+            continue;
+        }
+        [$type, $value] = $token;
+        if ($type === T_WHITESPACE || $type === T_OPEN_TAG || $type === T_DECLARE || $type === T_RETURN || $type === T_CONSTANT_ENCAPSED_STRING || $type === T_LNUMBER) continue;
+        if ($type === T_STRING && $value === 'strict_types') continue;
+        throw new RuntimeException($relative.' 迁移只能返回 SQL 字符串数组');
+    }
     if (preg_match_all('~["\']([A-Za-z0-9_]+)["\']~', $source, $matches)) foreach ($matches[1] as $identifier) {
         if (str_starts_with($identifier, 'plg_') && !str_starts_with($identifier, $prefix)) throw new RuntimeException($relative.' 引用了其他插件的数据表前缀');
     }

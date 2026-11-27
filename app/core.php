@@ -1899,8 +1899,9 @@ if ($request->path === '/me' && in_array($request->method, ['GET', 'POST'], true
     foreach ($tabs as $key=>$label) $body .= '<a href="'.($key === 'messages' ? '/messages' : '/me?tab='.$key).'"'.($tab === $key ? ' aria-current="page"' : '').'>'.$label.'</a>';
     $body .= '</nav><div class="member-panel">';
     if ($activePluginTab !== null) {
-        $content = ($activePluginTab['tab']->renderer)(['user'=>$user, 'viewer'=>$user, 'tab'=>$tab]);
-        if (!is_string($content) || strlen($content) > 1048576) throw new RuntimeException('Plugin profile tab returned invalid output.');
+        $content = extension_item_callback($activePluginTab['plugin'], 'profile tab renderer', $activePluginTab['tab']->renderer, [['user'=>$user, 'viewer'=>$user, 'tab'=>$tab], new PluginPreloadContext($activePluginTab['plugin'], 'profile-tab', ['user'=>$user])]);
+        if ($content === null) $content = '';
+        if (!is_string($content) || strlen($content) > 1048576) $content = '';
         $body .= $content;
     } elseif ($tab === 'profile') $body .= '<h2>个人资料</h2><form class="member-form" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="profile"><label>用户名<input value="'.e($user['username']).'" disabled></label><label>邮箱<input type="email" name="email" maxlength="254" value="'.e($user['email']).'" required></label><label>个人介绍<textarea name="bio" maxlength="500" rows="5">'.e($user['bio']).'</textarea></label><label>界面语言<select name="locale"><option value="zh-CN"'.($user['locale'] === 'zh-CN' ? ' selected' : '').'>简体中文</option><option value="en-US"'.($user['locale'] === 'en-US' ? ' selected' : '').'>English</option></select></label>'.extension_slot('member.profile.form.after', ['user'=>$user]).'<button class="primary">保存资料</button></form><form id="avatar-form" class="member-form avatar-form" method="post" action="/avatar/upload" enctype="multipart/form-data"><input type="hidden" name="csrf" value="'.e(csrf()).'"><label>头像<input type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp" required></label><button>上传头像</button></form>';
     elseif ($tab === 'security') $body .= '<h2>修改密码</h2><form class="member-form" method="post"><input type="hidden" name="csrf" value="'.e(csrf()).'"><input type="hidden" name="action" value="password"><label>当前密码<input type="password" name="current_password" autocomplete="current-password" required></label><label>新密码<input type="password" name="new_password" minlength="'.PasswordPolicy::MIN_CHARACTERS.'" maxlength="'.PasswordPolicy::MAX_CHARACTERS.'" autocomplete="new-password" required><small>'.PasswordPolicy::MIN_CHARACTERS.' 至 '.PasswordPolicy::MAX_CHARACTERS.' 个字符。保存后会退出其他设备。</small></label><button class="primary">更新密码</button></form>';
@@ -1914,8 +1915,9 @@ if ($request->path === '/me' && in_array($request->method, ['GET', 'POST'], true
         foreach ($notificationTabs as $entry) $body .= '<a href="/me?tab=notifications&amp;box='.rawurlencode($entry['tab']->id).'"'.($notificationBox === $entry['tab']->id ? ' aria-current="page"' : '').'>'.e($entry['tab']->label).'</a>';
         $body .= '</nav>';
         if ($activeNotificationTab !== null) {
-            $content = ($activeNotificationTab['tab']->renderer)(['user'=>$user, 'viewer'=>$user, 'tab'=>$notificationBox]);
-            if (!is_string($content) || strlen($content) > 1048576) throw new RuntimeException('Plugin notification tab returned invalid output.');
+            $content = extension_item_callback($activeNotificationTab['plugin'], 'notification tab renderer', $activeNotificationTab['tab']->renderer, [['user'=>$user, 'viewer'=>$user, 'tab'=>$notificationBox], new PluginPreloadContext($activeNotificationTab['plugin'], 'notification-tab', ['user'=>$user])]);
+            if ($content === null) $content = '';
+            if (!is_string($content) || strlen($content) > 1048576) $content = '';
             $body .= $content;
         } else {
         $rows = h('SELECT n.id,n.actor_id,n.topic_id,n.post_id,n.kind,n.read_at,n.created_at,u.username,t.title FROM notifications n JOIN users u ON u.id=n.actor_id LEFT JOIN topics t ON t.id=n.topic_id LEFT JOIN categories c ON c.id=t.category_id WHERE n.user_id=? AND (n.kind="message" OR (n.kind LIKE "plugin.%" AND (n.topic_id IS NULL OR (t.status="normal" AND c.is_visible=1))) OR (t.status="normal" AND c.is_visible=1)) ORDER BY n.created_at DESC,n.id DESC LIMIT 30', [$user['id']])->fetchAll();
@@ -2563,7 +2565,7 @@ if (preg_match('~^/(?:t/(\d+)|topic-(\d+)(?:-(\d+))?)$~', $path, $match)) {
         json_encode($config['seo'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
         theme_asset_signature($theme),
     ]));
-    $pageCacheKey = 'topic-page:v5:'.$pageSize.':'.$id.':'.$shellVersion.':'.(int)$versions['topic:'.$id].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'].':'.(int)$versions['plugins'].':'.(int)$versions['theme-settings:'.$theme];
+    $pageCacheKey = 'topic-page:v6:'.$pageSize.':'.$id.':'.$afterId.':'.$shellVersion.':'.(int)$versions['topic:'.$id].':'.(int)$versions['categories'].':'.(int)$versions['extension-read-pages'].':'.(int)$versions['plugins'].':'.(int)$versions['theme-settings:'.$theme];
     if ($cachePage && ($cachedPage = page_cache_read($pageCacheKey, 120)) !== null) {
         echo (string)($cachedPage[0] ?? '');
         return;
@@ -2768,8 +2770,9 @@ function handle_topic_reply(\LiteBBS\Framework\Request $request, int $topicId): 
     $body=trim((string)($input['body']??''));
     $replyTo=(int)($input['reply_to_post']??0);
     if($replyTo){
-        $target=h('SELECT p.body_markdown,p.topic_id,u.username FROM posts p JOIN users u ON u.id=p.user_id WHERE p.id=? AND p.status="normal"',[$replyTo])->fetch();
+        $target=h('SELECT p.body_markdown,p.topic_id,u.username,t.id AS visible_topic_id,c.id AS visible_category_id,c.title AS visible_category FROM posts p JOIN topics t ON t.id=p.topic_id JOIN categories c ON c.id=t.category_id JOIN users u ON u.id=p.user_id WHERE p.id=? AND p.status="normal" AND t.status="normal" AND c.is_visible=1',[$replyTo])->fetch();
         if(!$target||(int)$target['topic_id']!==$topicId)fail(400,'回复目标无效');
+        if(!extension_permits('category.view',['actor'=>$user,'category'=>['id'=>(int)$target['visible_category_id'],'title'=>(string)$target['visible_category']]])||!extension_permits('topic.view',['actor'=>$user,'topic'=>['id'=>(int)$target['visible_topic_id'],'category_id'=>(int)$target['visible_category_id']]]))fail(404,'回复目标不存在');
         $quoted=preg_split('/\R/u',(string)$target['body_markdown'])?:[];
         $body='回复 '.$target['username']."：\n> ".implode("\n> ",$quoted)."\n\n".$body;
     }
@@ -2811,7 +2814,7 @@ function handle_topic_reply(\LiteBBS\Framework\Request $request, int $topicId): 
     if($topicAuthorId!==(int)$user['id'])invalidate_user_cache($topicAuthorId);
     // Feed caches have a bounded TTL. Avoid invalidating every public listing
     // for each reply; only the changed topic page needs immediate freshness.
-    invalidate_topic_read_cache($topicId, (int)$topic['category_id'], false, false);
+    invalidate_topic_read_cache($topicId, (int)$topic['category_id'], false);
     redirect('/t/'.$topicId.'#p'.$postId);
 }
 

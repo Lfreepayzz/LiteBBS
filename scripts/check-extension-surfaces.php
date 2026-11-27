@@ -25,6 +25,14 @@ check_surface(
     'Profile command drafts must be immutable and retain supplied values.'
 );
 
+$migrationSource = "<?php\ndeclare(strict_types=1);\nreturn ['CREATE TABLE plg_surface_test_items (id INT)'];\n";
+extension_validate_migration_source($migrationSource, 'migrations/20261127_0001_surface.php', 'plg_surface_test_');
+try {
+    extension_validate_migration_source("<?php\ndb()->query('CREATE TABLE users (id INT)');\nreturn ['CREATE TABLE plg_surface_test_items (id INT)'];\n", 'migrations/20261127_0001_surface.php', 'plg_surface_test_');
+    throw new LogicException('Executable plugin migration source was accepted.');
+} catch (RuntimeException) {
+}
+
 $profilePageRequest = new PublicProfilePageRequest([], null, 2, 20);
 $profilePage = new PublicProfilePage([['id'=>1]], true);
 check_surface($profilePageRequest->page === 2 && $profilePage->hasMore(), 'Public profile pagination must use a page number and hasMore flag.');
