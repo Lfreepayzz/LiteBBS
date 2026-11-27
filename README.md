@@ -1,5 +1,10 @@
 
-LiteBBS基于 PHP 和 MySQL 轻量论坛程序，提供主题与回复、分区管理、内容审核、审计日志、主题和插件扩展能力。
+LiteBBS是一个轻量 博客/论坛程序，提供主题与回复、分区管理、内容审核、审计日志、主题和插件扩展能力。
+
+LiteBLOG仓库合并公告，以后统一使用这个仓库  https://github.com/Lfreepayzz/LiteBBS
+
+重大改版：升级以后数据库配置文件夹private修改为database ，database必须包含最新数据库，后台升级数据库
+
 
 ## 演示
 
