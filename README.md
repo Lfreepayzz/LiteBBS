@@ -9,6 +9,7 @@ LiteBLOG仓库合并公告，以后统一使用这个仓库  https://github.com/
 ## 演示
 
 [论坛演示地址](https://bolgk.eu.org/)
+
 [博客演示地址](https://forum.lxi.be/)
 
 
