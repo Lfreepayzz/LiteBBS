@@ -140,7 +140,7 @@ function program_update_local_files(): array {
 function program_update_core_file_paths(): array
 {
     static $paths = [
-        'index.php'=>true, 'install.php'=>true, '.htaccess'=>true, 'PLUGIN.md'=>true, 'database/schema.sql'=>true,
+        'index.php'=>true, 'install.php'=>true, '.htaccess'=>true, 'PLUGIN.md'=>true, 'assets/index.svg'=>true, 'database/schema.sql'=>true,
         'app/admin.php'=>true, 'app/core.php'=>true, 'app/kernel.php'=>true, 'app/plugin.php'=>true, 'app/scanner.php'=>true, 'app/share.php'=>true, 'app/template.php'=>true, 'app/update.php'=>true, 'app/version.php'=>true,
     ];
     return $paths;
