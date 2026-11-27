@@ -126,3 +126,13 @@
     .program-update-info { display: grid; gap: 8px; }
     .program-update-page .primary { width: 100%; }
 }
+.program-update-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--line); }
+.program-update-heading h2 { margin: 0; font-size: 15px; font-weight: 650; }
+.program-feedback-link { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; color: var(--muted); font-size: 12px; text-decoration: none; }
+.program-feedback-link span { font-size: 14px; line-height: 1; transition: transform 160ms ease; }
+.program-feedback-link:hover { color: var(--link); }
+.program-feedback-link:hover span { transform: translate(1px, -1px); }
+
+@media (max-width: 480px) {
+    .program-update-heading { padding-inline: 12px; }
+}

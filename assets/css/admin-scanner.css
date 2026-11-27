@@ -1,0 +1,65 @@
+.security-console { max-width: 1080px; overflow-wrap: anywhere; }
+.security-hero { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 24px; overflow: hidden; padding: 26px 28px; border: 1px solid #183750; background: linear-gradient(122deg, #102634, #153c53); color: #e8f4fa; }
+.security-hero::before { position: absolute; inset: 0; opacity: .28; background-image: linear-gradient(#8dd8fa1c 1px, transparent 1px), linear-gradient(90deg, #8dd8fa1c 1px, transparent 1px); background-size: 25px 25px; content: ""; pointer-events: none; }
+.security-hero::after { position: absolute; top: -90px; right: 9%; width: 230px; aspect-ratio: 1; border: 1px solid #76d1f155; border-radius: 50%; box-shadow: 0 0 0 28px #76d1f10d, 0 0 0 56px #76d1f108; content: ""; }
+.security-hero-copy, .security-hero-action { position: relative; z-index: 1; }
+.security-kicker { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; color: #86d9fa; font: 700 10px/1 ui-monospace, Consolas, monospace; letter-spacing: 1.2px; }
+.security-kicker span { width: 7px; height: 7px; border-radius: 50%; background: #56d69c; box-shadow: 0 0 0 4px #56d69c25; }
+.security-hero h2 { margin: 0; font-size: 23px; letter-spacing: -.3px; }
+.security-hero-copy > p:last-child { max-width: 620px; margin: 8px 0 0; color: #bed5e0; }
+.security-hero-action { display: grid; flex: 0 0 auto; gap: 8px; text-align: right; }
+.security-hero-action .primary { min-height: 40px; border: 1px solid #66c9ed; border-radius: 2px; background: #e4f7fe; color: #0d3448; }
+.security-hero-action small { color: #a6c5d2; font: 11px ui-monospace, Consolas, monospace; }
+.security-live-progress { width: 100%; height: 5px; accent-color: #79d5f5; }
+.security-live-progress[hidden] { display: none; }
+.security-result-actions form .security-live-progress { display: block; min-width: 96px; margin-top: 6px; }
+.security-result-actions form small[data-security-scan-status] { display: block; max-width: 180px; margin-top: 5px; color: var(--muted); font: 10px/1.4 ui-monospace, Consolas, monospace; }
+.security-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.security-metric { position: relative; display: grid; gap: 6px; min-height: 118px; padding: 16px; border: 1px solid var(--line); border-top: 3px solid #5d7482; background: var(--card); }
+.security-metric.is-safe { border-top-color: #258a6c; }
+.security-metric.is-alert { border-top-color: #c53e47; }
+.security-metric.is-warning { border-top-color: #b37b13; }
+.security-metric span, .security-metric small { color: var(--muted); font-size: 12px; }
+.security-metric strong { font: 700 30px/1 ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.security-guide { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); background: var(--soft); }
+.security-guide > div { padding: 12px 16px; }
+.security-guide > div + div { border-left: 1px solid var(--line); }
+.security-guide strong { display: block; margin-bottom: 2px; font-size: 12px; }
+.security-guide span { color: var(--muted); font-size: 12px; }
+.security-online-progress { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); background: var(--card); }
+.security-online-progress > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.security-online-progress > div span, .security-online-progress p { color: var(--muted); }
+.security-online-progress progress { display: block; width: 100%; height: 7px; margin: 10px 0 8px; accent-color: var(--accent); }
+.security-online-progress p { margin: 0; font: 11px/1.5 ui-monospace, Consolas, monospace; }
+.security-results { margin-top: 20px; border: 1px solid var(--line); background: var(--card); }
+.security-results-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--line); }
+.security-results-heading .security-kicker { color: var(--accent); }
+.security-results-heading .security-kicker span { background: var(--accent); box-shadow: none; }
+.security-results-heading h2 { margin: 0; font-size: 16px; }
+.security-results-heading > span { color: var(--muted); font-size: 12px; }
+.security-result { border-left: 4px solid #258a6c; }
+.security-result + .security-result { border-top: 1px solid var(--line); }
+.security-result.is-alert { border-left-color: #c53e47; }
+.security-result.is-warning { border-left-color: #b37b13; }
+.security-result > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; }
+.security-package, .security-result-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.security-package-kind { display: grid; flex: 0 0 36px; width: 36px; height: 36px; place-items: center; border: 1px solid currentColor; background: var(--soft); color: var(--muted); font: 700 11px ui-monospace, Consolas, monospace; }
+.security-package h3 { margin: 0; font-size: 14px; }
+.security-package p { margin: 2px 0 0; color: var(--muted); font: 11px ui-monospace, Consolas, monospace; }
+.security-status { padding: 4px 8px; border: 1px solid currentColor; border-radius: 999px; color: #23735b; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.is-alert .security-status { color: #ad2832; }
+.is-warning .security-status { color: #946609; }
+.security-result-actions form { margin: 0; }
+.security-result-actions button { white-space: nowrap; }
+.security-issues { margin: 0 16px 15px; border: 1px solid var(--line); background: var(--soft); }
+.security-issues h4 { margin: 0; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.security-issues ul { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.security-issues li { display: grid; grid-template-columns: auto minmax(120px, .8fr) minmax(160px, 1.5fr) auto; align-items: center; gap: 8px; padding: 8px 10px; background: var(--card); font-size: 12px; }
+.security-issues li:has(.is-compatibility) { grid-template-columns: auto 1fr; }
+.security-issues code, .security-issues small { color: var(--muted); font: 11px ui-monospace, Consolas, monospace; }
+.security-online { margin: 0 16px 15px; color: var(--muted); font: 11px/1.5 ui-monospace, Consolas, monospace; }
+.security-severity { padding: 2px 5px; border-radius: 2px; background: #e8f1f8; color: #135e96; font: 700 10px ui-monospace, Consolas, monospace; text-transform: uppercase; }
+.security-severity.is-high { background: #fbe8e9; color: #ad2832; }
+.security-severity.is-test { background: #e8f1f8; color: #135e96; }
+.security-severity.is-medium, .security-severity.is-compatibility { background: #fff3d4; color: #896000; }
+@media (max-width: 700px) { .security-hero, .security-result > header { align-items: flex-start; flex-direction: column; } .security-hero-action { width: 100%; text-align: left; } .security-hero-action .primary { width: 100%; } .security-metrics, .security-guide { grid-template-columns: 1fr; } .security-guide > div + div { border-top: 1px solid var(--line); border-left: 0; } .security-online-progress > div { align-items: flex-start; flex-direction: column; gap: 3px; } .security-results-heading { align-items: flex-start; flex-direction: column; } .security-result-actions { width: 100%; justify-content: space-between; } .security-issues li, .security-issues li:has(.is-compatibility) { grid-template-columns: auto 1fr; } .security-issues li > :is(code, small) { grid-column: 2; } }

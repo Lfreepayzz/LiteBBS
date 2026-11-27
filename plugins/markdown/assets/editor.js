@@ -88,7 +88,10 @@
     let previewRequest = null;
     let previewTimer = null;
     let previewRevision = 0;
+    let previewedSource = null;
     const refresh = async () => {
+      if (textarea.value === previewedSource) return;
+      const source = textarea.value;
       const revision = ++previewRevision;
       previewRequest?.abort();
       previewRequest = new AbortController();
@@ -101,13 +104,14 @@
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-          body: new URLSearchParams({ csrf, body: textarea.value }),
+          body: new URLSearchParams({ csrf, body: source }),
           signal: previewRequest.signal,
         });
         const html = await response.text();
         if (revision !== previewRevision) return;
         if (!response.ok) throw new Error(html || `HTTP ${response.status}`);
         preview.innerHTML = html || '<p class="markdown-editor-empty">还没有可预览的内容。</p>';
+        previewedSource = source;
       } catch (error) {
         if (error.name === 'AbortError' || revision !== previewRevision) return;
         preview.textContent = `预览失败：${error.message || 'Markdown 服务暂时不可用'}`;
@@ -153,7 +157,7 @@
     textarea.addEventListener('input', () => {
       if (!preview.classList.contains('is-visible')) return;
       clearTimeout(previewTimer);
-      previewTimer = setTimeout(refresh, 250);
+      previewTimer = setTimeout(refresh, 600);
     });
     textarea.addEventListener('keydown', (event) => {
       if (!(event.ctrlKey || event.metaKey)) return;

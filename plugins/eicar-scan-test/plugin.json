@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "eicar-scan-test",
+  "title": "EICAR 病毒扫描测试",
+  "description": "仅用于验证病毒扫描器的无害测试标记；请勿启用。",
+  "version": "1.0.0",
+  "requires": { "core": ">=1.0 <2.0" },
+  "entry": "src/Plugin.php",
+  "class": "EicarScanTestPlugin",
+  "permissions": [],
+  "assets": [],
+  "hooks": {},
+  "database_tables": []
+}

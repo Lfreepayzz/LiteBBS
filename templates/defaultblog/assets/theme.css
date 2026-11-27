@@ -1,0 +1,530 @@
+/* Visual port of hexo-theme-default-dev (GPL-3.0), shared shell and core controls. */
+body.default {
+  --default-theme: #425aef;
+  --default-main: var(--default-theme);
+  --default-main-op: #4259ef23;
+  --default-on-main: #fff;
+  --default-fontcolor: #363636;
+  --default-secondtext: #55555c;
+  --default-background: #f7f9fe;
+  --default-card-bg: #fff;
+  --default-card-border: #e3e8f7;
+  --default-secondbg: #f7f7f9;
+  --default-card-btn-bg: #edf0f7;
+  --default-scrollbar: #3c3c4366;
+  --default-shadow-border: 0 8px 16px -4px #2c2d300c;
+  --default-shadow-main: 0 8px 12px -3px var(--default-main-op);
+  --default-author-gradient: linear-gradient(-25deg, #354ddd, #5970f5, #354ddd, #5970f5);
+  --style-border: 1px solid var(--default-card-border);
+  --default-width: 1400px;
+  --default-gutter: 1.5rem;
+  --default-radius: 12px;
+  --default-nav-height: 60px;
+  color-scheme: light;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--default-background);
+  color: var(--default-fontcolor);
+  font: 14px/2 -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Lato, Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+html[data-theme="dark"] body.default {
+  --default-theme: #f2b94b;
+  --default-main-op: #f2b94b23;
+  --default-on-main: #18171d;
+  --default-fontcolor: #f7f7fa;
+  --default-secondtext: #a1a2b8;
+  --default-background: #18171d;
+  --default-card-bg: #1d1e22;
+  --default-card-border: #42444a;
+  --default-secondbg: #21232a;
+  --default-card-btn-bg: #30343f;
+  --default-scrollbar: #c8c8df66;
+  --default-author-gradient: linear-gradient(-25deg, #594117, #164e7d, #594117, #164e7d);
+  color-scheme: dark;
+}
+
+body.default *, body.default *::before, body.default *::after { box-sizing: border-box; }
+body.default ::selection { color: var(--default-on-main); background: var(--default-main); }
+body.default :where(a) { color: inherit; text-decoration: none; }
+body.default :where(a:hover) { color: var(--default-main); }
+body.default :where(button, input, textarea, select) { color: inherit; font: inherit; }
+body.default :where(img, video, iframe) { max-width: 100%; }
+body.default :where(img, video) { height: auto; }
+body.default :where(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--default-main);
+  outline-offset: 2px;
+}
+body.default :where([id]) { scroll-margin-top: calc(var(--default-nav-height) + 1rem); }
+body.default [hidden] { display: none !important; }
+body.default :where(.skip-link:not(:focus), .visually-hidden) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+body.default .skip-link:focus {
+  position: fixed;
+  z-index: 110;
+  top: 8px;
+  left: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: var(--default-card-bg);
+}
+
+body.default #page-header { position: relative; padding-top: var(--default-nav-height); }
+body.default #nav {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 91;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--default-nav-height);
+  padding-inline: max(var(--default-gutter), calc((100% - var(--default-width)) / 2 + var(--default-gutter)));
+  border-bottom: var(--style-border);
+  background: var(--default-card-bg);
+}
+body.default #page-header.nav-fixed #nav { position: fixed; }
+body.default #nav :where(#blog-info, #blog_name, #menus, #nav-right, .nav-button, .menus_items, .account-nav) {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+body.default #nav .menus_items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1rem;
+  font-weight: 700;
+}
+body.default #nav :where(#site-name, .menus_items > a, .menus_item > a, .nav-button > a, .nav-button > button, a.nav-button, button.nav-button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .25s, color .25s, box-shadow .25s;
+}
+body.default #nav #site-name { display: block; overflow: hidden; font-size: 1.2rem; font-weight: 700; line-height: 36px; text-overflow: ellipsis; }
+body.default #nav :where(#site-name, .menus_items a, .nav-button > a, .nav-button > button, a.nav-button, button.nav-button):is(:hover, [aria-current="page"]) {
+  background: var(--default-main);
+  color: var(--default-on-main);
+  box-shadow: var(--default-shadow-main);
+}
+body.default #nav :where(.menus_item, .nav-button) { position: relative; }
+body.default #nav .menus_item_child {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: max-content;
+  margin: 0;
+  padding: 6px;
+  transform: translateX(-50%);
+  visibility: hidden;
+  list-style: none;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-border);
+}
+body.default #nav .menus_item:is(:hover, :focus-within) .menus_item_child { visibility: visible; }
+body.default #nav .menus_item_child a { display: block; padding: 4px 10px; border-radius: 8px; }
+body.default #nav .nav-icon { justify-content: center; width: 36px; }
+body.default #nav .search-icon { position: relative; width: 14px; height: 14px; border: 2px solid currentColor; border-radius: 50%; }
+body.default #nav .search-icon::after { position: absolute; top: 9px; left: 9px; width: 7px; height: 2px; background: currentColor; transform: rotate(45deg); transform-origin: left; content: ""; }
+body.default #nav .write-icon { font-size: 22px; }
+body.default #toggle-menu > summary { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; list-style: none; cursor: pointer; }
+body.default #toggle-menu > summary::-webkit-details-marker { display: none; }
+body.default #toggle-menu:is([open], :hover) > summary { background: var(--default-main); color: var(--default-on-main); }
+body.default .nav-popover { position: absolute; top: calc(100% + 5px); right: 0; width: max-content; min-width: 120px; padding: 6px; border: var(--style-border); border-radius: 12px; background: var(--default-card-bg); box-shadow: var(--default-shadow-border); }
+body.default .nav-popover :where(a, button) { display: block; width: 100%; padding: 4px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
+body.default .nav-popover :where(a, button):hover { background: var(--default-main); color: var(--default-on-main); }
+body.default #nav :where(.header-search, .nav-search) { display: flex; gap: 4px; min-width: 0; align-items: center; }
+body.default #nav :where(input:not([type="hidden"])) {
+  width: min(20vw, 220px);
+  min-width: 0;
+  padding: 2px 9px;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-secondbg);
+}
+
+body.default #content-inner.layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: var(--default-width);
+  margin-inline: auto;
+  padding: 1.25rem var(--default-gutter);
+}
+body.default .default-main { flex: 1; min-width: 0; }
+body.default .default-main:not(:has(#recent-posts, .topic-thread, .member-center > .member-panel)) {
+  padding: 2rem 2.5rem;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-border);
+}
+body.default #aside-content { display: grid; gap: 20px; flex: 0 0 285px; min-width: 0; }
+body.default #aside-content .card-widget {
+  position: relative;
+  padding: 20px 24px;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-border);
+}
+body.default #aside-content .card-info {
+  padding: 1rem 1.2rem;
+  min-height: 320px;
+  background: var(--default-author-gradient) 0 50% / 400% 100%;
+  color: #fff;
+  animation: default-gradient 15s ease infinite;
+}
+body.default #aside-content .card-info a:hover { color: #fff; text-decoration: underline; }
+body.default #aside-content :where(#author-info__sayhi, #card-info-btn, .card-info-social-icons a) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 9px;
+  border-radius: 20px;
+  background: #ffffff30;
+  color: #fff;
+  font-size: .875rem;
+}
+body.default #aside-content #author-info__sayhi { display: table; margin-inline: auto; font-size: .75rem; }
+body.default #aside-content :where(.author-info-avatar, .avatar-img) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 118px;
+  height: 118px;
+  margin: 40px auto;
+}
+body.default #aside-content .author-info-avatar { position: relative; }
+body.default #aside-content .author-info-avatar .avatar-img { margin: 0; }
+body.default #aside-content :where(.author-info-avatar > img, img.avatar-img) { border-radius: 50%; aspect-ratio: 1; object-fit: cover; }
+body.default #aside-content .author-status {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border-radius: 50%;
+  background: #fff;
+}
+body.default #aside-content .author-status img { width: 26px; }
+body.default #aside-content .author-info__bottom-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+body.default #aside-content .author-info__name { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.2; }
+body.default #aside-content .author-info__desc { font-size: 12px; opacity: .8; }
+body.default #aside-content :where(.item-headline, .card-widget h2) { margin: 0 0 8px; font-size: 1em; font-weight: 700; }
+body.default #aside-content .item-headline { display: flex; align-items: center; gap: 6px; }
+body.default #aside-content .card-announcement .item-headline :where(i, svg) { color: #d8213c; }
+body.default .announcement-icon { color: #d8213c; }
+body.default #aside-content .card-categories :where(ul) { margin: 0; padding: 0; list-style: none; }
+body.default #aside-content .card-categories a {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+body.default #aside-content .card-categories a:is(:hover, .active, [aria-current="page"]) { background: var(--default-main); color: var(--default-on-main); }
+
+body.default #footer {
+  width: 100%;
+  background: linear-gradient(180deg, transparent, var(--default-card-bg) 25%);
+  color: var(--default-secondtext);
+}
+body.default #footer-wrap { max-width: var(--default-width); margin: auto; padding: 40px var(--default-gutter); text-align: center; }
+body.default #footer :where(#footer_deal, #default-footer, .footer-bar-links) { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px 24px; }
+body.default #footer #default-footer { justify-content: space-between; text-align: start; }
+body.default #footer #footer-bar { padding: 1rem; background: var(--default-secondbg); }
+body.default #footer .footer-bar-links { max-width: var(--default-width); margin: auto; justify-content: space-between; }
+body.default #footer .deal_link { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--default-fontcolor); color: var(--default-card-bg); }
+body.default #footer .deal_link:hover { background: var(--default-main); color: var(--default-on-main); }
+body.default #footer .footer_mini_logo { width: 50px; height: 50px; object-fit: cover; border-radius: 50%; }
+body.default #rightside { position: fixed; z-index: 90; right: 8px; bottom: 40px; display: grid; gap: 5px; }
+body.default #rightside > div { display: grid; gap: 5px; }
+body.default #rightside :where(a, button) {
+  display: grid;
+  place-items: center;
+  min-width: 35px;
+  min-height: 35px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--default-main);
+  color: var(--default-on-main);
+  cursor: pointer;
+}
+body.default #rightside :where(a, button):hover { background: var(--default-fontcolor); color: var(--default-card-bg); }
+
+/* Shared controls use the same surfaces on account, search and compose routes. */
+body.default .default-main :where(.form, .member-form, .search) { max-width: 48rem; }
+body.default .default-main :where(.form, .member-form, .search) label { display: block; margin-block: 12px; font-weight: 600; }
+body.default .default-main :where(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="range"], [type="color"]), select, textarea) {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-secondbg);
+  color: var(--default-fontcolor);
+  line-height: 1.6;
+}
+body.default .default-main :where(input, select, textarea):focus { border-color: var(--default-main); }
+body.default .default-main textarea { resize: vertical; }
+body.default :where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--default-main); }
+body.default .default-main :where(.primary, .feed-create, .attachment-download, .search button, .form button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 3px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--default-main);
+  color: var(--default-on-main);
+  font-weight: 700;
+  cursor: pointer;
+}
+body.default .default-main :where(.primary, .feed-create, .attachment-download, .search button, .form button):hover { background: var(--default-fontcolor); color: var(--default-card-bg); }
+body.default .default-main :where(.eyebrow, small) { color: var(--default-secondtext); }
+body.default .default-main :where(.error, .field-error) { color: #d8213c; }
+html[data-theme="dark"] body.default .default-main :where(.error, .field-error) { color: #ff8b90; }
+body.default .default-main :where(.plugin-attachment-fields, .market-card, .member-notification, .member-row) {
+  margin-block: 10px;
+  padding: 12px 16px;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-secondbg);
+}
+body.default :where(.plugin-attachment-fields summary, .report-control summary) { cursor: pointer; }
+body.default .default-main :where(.member-tabs, .member-stats) { display: flex; gap: 8px; flex-wrap: wrap; }
+body.default .default-main :where(.member-tabs, .member-stats) a { padding: 4px 8px; border-radius: 8px; background: var(--default-secondbg); }
+body.default .default-main :where(.member-tabs, .member-stats) a[aria-current="page"] { background: var(--default-main); color: var(--default-on-main); }
+
+body.default .member-center {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  line-height: 1.65;
+}
+body.default .member-center .member-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(.75rem, 2.5vw, 1.5rem);
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: linear-gradient(135deg, var(--default-card-bg), var(--default-secondbg));
+  box-shadow: var(--default-shadow-border);
+  color: var(--default-fontcolor);
+}
+body.default .member-center .member-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: clamp(3rem, 8vw, 4.5rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  background: var(--default-main-op);
+  color: var(--default-main);
+  font-size: 1.65rem;
+  font-weight: 700;
+}
+body.default .member-center .member-avatar img { width: 100%; height: 100%; object-fit: cover; }
+body.default .member-center .member-hero > div { flex: 1 1 10rem; min-width: 0; }
+body.default .member-center .member-hero h1 { margin: .15em 0; font-size: clamp(1.5rem, 4vw, 2.25rem); line-height: 1.2; }
+body.default .member-center .member-hero p { margin: 0; color: var(--default-secondtext); }
+body.default .member-center .member-hero .eyebrow { font-size: .72rem; letter-spacing: .1em; }
+body.default .member-center .member-hero > a {
+  padding: .5rem .85rem;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-card-bg);
+  color: var(--default-main);
+  font-weight: 600;
+}
+body.default .member-center .member-hero > a:hover { border-color: var(--default-main); background: var(--default-main); color: var(--default-on-main); }
+body.default .member-center .member-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(5.25rem, 100%), 1fr));
+  gap: 6px;
+  padding: 7px;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+}
+body.default .member-center .member-tabs a { padding: .55rem .25rem; text-align: center; font-weight: 600; }
+body.default .member-center .member-tabs a:not([aria-current="page"]):hover { background: var(--default-card-btn-bg); }
+body.default .member-center .member-panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 2rem);
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-border);
+}
+body.default .member-center h2 { margin: 0; font-size: 1.25rem; }
+body.default .member-center > .public-bio,
+body.default .member-center > .member-post {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-border);
+}
+body.default .member-center > .public-bio {
+  color: var(--default-secondtext);
+  white-space: normal;
+}
+body.default .member-center > .member-post { display: grid; gap: .3rem; }
+body.default .member-center > .member-post > a { font-size: 1.05rem; font-weight: 700; }
+body.default .member-center > .member-post > a:hover { color: var(--default-main); }
+body.default .member-center > .member-post > p { margin: 0; color: var(--default-secondtext); }
+body.default .member-center > .topic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: .25rem 0;
+}
+body.default .member-center > .topic-actions :where(a, button, summary) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: .35rem .75rem;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-card-bg);
+  color: var(--default-secondtext);
+  font-weight: 600;
+  cursor: pointer;
+}
+body.default .member-center > .topic-actions :where(a, button, summary):hover {
+  border-color: var(--default-main);
+  color: var(--default-main);
+}
+body.default .member-center .member-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(5px, 1.5vw, 12px);
+  margin-bottom: .35rem;
+}
+body.default .member-center .member-stats a {
+  display: grid;
+  gap: .25rem;
+  padding: .75rem .35rem;
+  border: var(--style-border);
+  background: var(--default-secondbg);
+  text-align: center;
+  line-height: 1.35;
+}
+body.default .member-center .member-stats strong { color: var(--default-main); font-size: clamp(1.15rem, 3vw, 1.8rem); }
+body.default .member-center .member-stats a:hover { border-color: var(--default-main); }
+body.default .member-center .member-list { display: grid; gap: 8px; min-width: 0; }
+body.default .member-center .member-row { display: grid; gap: .25rem; margin: 0; }
+body.default .member-center a.member-row:hover { border-color: var(--default-main); }
+body.default .member-center .member-row > :first-child { font-weight: 650; }
+body.default .member-center .member-row > :where(time, span:not(:first-child)) { color: var(--default-secondtext); }
+body.default .member-center .member-row > a { width: fit-content; }
+body.default .member-center .member-row > a:last-child { color: var(--default-main); }
+body.default .member-center .empty-state {
+  margin: 0;
+  padding: 1.5rem .75rem;
+  border: 1px dashed var(--default-card-border);
+  border-radius: var(--default-radius);
+  color: var(--default-secondtext);
+  text-align: center;
+}
+body.default .member-center .member-form label { display: grid; gap: .25rem; margin: 0 0 1rem; font-weight: 600; }
+body.default .member-center .member-form small { font-weight: 400; }
+body.default .member-center .avatar-form { padding-top: 1rem; border-top: var(--style-border); }
+body.default .member-center .member-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+body.default .member-center :is(.member-actions, .member-form, .member-row) button:not(.primary) {
+  min-height: 36px;
+  padding: .35rem .75rem;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-card-btn-bg);
+  font-weight: 600;
+  cursor: pointer;
+}
+body.default .member-center :is(.member-actions, .member-form, .member-row) button:not(.primary):hover { border-color: var(--default-main); }
+body.default .member-center .member-clear-notifications button:not(.primary) { color: #ae2540; }
+html[data-theme="dark"] body.default .member-center .member-clear-notifications button:not(.primary) { color: #ff8b90; }
+
+body.default :where(.pagination, #pagination) { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-block: 1rem; }
+body.default :where(.pagination, #pagination) :where(a, .page-number, .extend) {
+  display: inline-flex;
+  min-width: 40px;
+  min-height: 40px;
+  justify-content: center;
+  align-items: center;
+  padding: 0 12px;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-card-bg);
+  font-weight: 700;
+}
+body.default :where(.pagination, #pagination) :where(a:hover, [aria-current="page"], .current) { background: var(--default-main); color: var(--default-on-main); border-color: var(--default-main); }
+body.default :where(.pagination-next) { flex: 1; }
+
+@keyframes default-gradient {
+  0%, 100% { background-position: 0 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@media (max-width: 1200px) {
+  body.default #content-inner.layout { flex-direction: column; align-items: stretch; padding-top: 10px; }
+  body.default #aside-content { grid-template-columns: repeat(auto-fit, minmax(min(235px, 100%), 1fr)); flex: auto; }
+}
+@media (max-width: 768px) {
+  body.default { --default-gutter: 15px; }
+  body.default #nav { gap: 4px; }
+  body.default #nav .menus_items { font-size: .875rem; }
+  body.default #nav :where(.menus_items > a, .menus_item > a, .nav-button > a, .nav-button > button, a.nav-button, button.nav-button) { padding-inline: 6px; }
+  body.default #nav #site-name { padding-inline: 4px; font-size: 1rem; }
+  body.default #nav:has(#toggle-menu) #menus { display: none; }
+  body.default #nav:not(:has(#toggle-menu)) #menus { overflow-x: auto; scrollbar-width: thin; }
+  body.default .default-main:not(:has(#recent-posts, .topic-thread, .member-center > .member-panel)) { padding: 1rem; }
+  body.default #aside-content { gap: 12px; }
+  body.default #aside-content .card-info { display: none; }
+  body.default #footer-wrap { padding-block: 24px; }
+  body.default #rightside { bottom: max(12px, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.default #aside-content .card-info { animation: none; }
+}

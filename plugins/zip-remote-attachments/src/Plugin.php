@@ -5,24 +5,22 @@ final class ZipRemoteAttachmentsPlugin implements LiteBBSPlugin
 {
     public function boot(PluginContext $context): void
     {
-        $context->assets()->css('assets/style.css');
+        $context->assets()->css('assets/style.css', ['topic.create', 'topic.view', 'post.edit']);
         $context->slots()->add('topic.create.fields', static fn(array $view): string => '<details class="plugin-attachment-fields"><summary><span><strong>添加 ZIP / 远程附件</strong><small>可选，仅支持一个 ZIP 文件或一个远程 ZIP 地址</small></span><span class="plugin-attachment-badge">ZIP ONLY</span></summary><div class="plugin-attachment-content"><div class="plugin-attachment-heading"><div><h2>选择附件来源</h2><p>本地上传和远程地址二选一，远程文件必须使用 HTTPS。</p></div></div><div class="plugin-attachment-sources"><label><span>本地 ZIP 文件</span><input type="file" name="plugin_zip_attachment" accept=".zip,application/zip,application/x-zip-compressed"><small>单个文件最大 10 MiB</small></label><span class="plugin-attachment-or" aria-hidden="true">或</span><label><span>远程 ZIP 地址</span><input type="url" name="plugin_remote_attachment" maxlength="2048" placeholder="https://example.com/file.zip"><small>仅接受以 .zip 结尾的 HTTPS 地址</small></label></div><div class="plugin-attachment-access"><label><span>下载权限</span><select name="plugin_attachment_access"><option value="login">登录后下载</option><option value="reply">回复主题后下载</option><option value="points">积分购买后下载</option></select><small>下载者需满足所选条件。</small></label><label><span>积分价格</span><input type="number" name="plugin_attachment_points" min="1" max="100000" value="1" inputmode="numeric"><small>仅“积分购买后下载”时扣除积分。</small></label></div></div></details>');
         $context->slots()->add('post.edit.fields', static function (array $view): string { return zip_attachment_render_edit($view); });
         $context->events()->listen('topic.create.preflight', static function (array $event): void { zip_attachment_prepare_create($event); });
         $context->events()->listen('topic.created', static function (array $event): void { zip_attachment_create($event); });
         $context->events()->listen('post.created', static function (array $event): void { zip_attachment_grant_reply($event); });
         $context->events()->listen('post.updated', static function (array $event): void { zip_attachment_update($event); });
-        $context->preloads()->add('post.after-body', static function (array $view): void { zip_attachment_preload($view); });
-        $context->slots()->add('post.after-body', static function (array $view): string { return zip_attachment_render($view); }, 20);
-        $context->routes()->front('GET', '~^/attachments/download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response { return zip_attachment_download((int)$params['id']); });
+        $context->preloads()->add('post.after-body', static function (array $view, PluginPreloadContext $preload): void { zip_attachment_preload($view, $preload); });
+        $context->slots()->add('post.after-body', static function (array $view): string { return zip_attachment_render($view, new PluginPreloadContext('zip-remote-attachments', 'post.after-body', $view)); }, 20);
+        $context->routes()->front('GET', '~^/attachments/download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response { return zip_attachment_download((int)$params['id']); }, ['auth'=>'user']);
         $context->routes()->front('POST', '~^/attachments/unlock/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
-            require_post();
             return zip_attachment_unlock((int)$params['id']);
-        });
+        }, ['auth'=>'user']);
         $context->routes()->front('POST', '~^/attachments/external-download/(?P<id>[0-9]+)$~', static function (\LiteBBS\Framework\Request $request, array $params): \LiteBBS\Framework\Response {
-            require_post();
             return zip_attachment_external_download((int)$params['id']);
-        });
+        }, ['auth'=>'user']);
     }
 }
 
@@ -32,15 +30,17 @@ function &zip_attachment_request_cache(): array
     return $cache;
 }
 
-function zip_attachment_preload(array $view): void
+function zip_attachment_preload(array $view, PluginPreloadContext $preload): void
 {
     $posts = $view['posts'] ?? []; $viewer = $view['viewer'] ?? null;
     $ids = array_values(array_unique(array_map(static fn(array $post): int => (int)$post['id'], $posts)));
     if (!$ids) return;
     $marks = implode(',', array_fill(0, count($ids), '?'));
-    $cache =& zip_attachment_request_cache();
-    foreach (h('SELECT id,post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,status,created_at FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active" ORDER BY id', $ids)->fetchAll() as $file) $cache['files'][(int)$file['post_id']][] = $file;
-    if ($viewer) foreach (h('SELECT attachment_id FROM plg_zip_remote_attachments_grants WHERE user_id=? AND attachment_id IN (SELECT id FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active")', array_merge([(int)$viewer['id']], $ids))->fetchAll(PDO::FETCH_COLUMN) as $attachmentId) $cache['grants'][(int)$attachmentId] = true;
+    $files = [];
+    $grants = [];
+    foreach (h('SELECT id,post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,status,created_at FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active" ORDER BY id', $ids)->fetchAll() as $file) $files[(int)$file['post_id']][] = $file;
+    if ($viewer) foreach (h('SELECT attachment_id FROM plg_zip_remote_attachments_grants WHERE user_id=? AND attachment_id IN (SELECT id FROM plg_zip_remote_attachments_files WHERE post_id IN ('.$marks.') AND status="active")', array_merge([(int)$viewer['id']], $ids))->fetchAll(PDO::FETCH_COLUMN) as $attachmentId) $grants[(int)$attachmentId] = true;
+    $preload->put('attachments', ['files'=>$files, 'grants'=>$grants]);
 }
 
 function zip_attachment_prepare_key(array $event): string
@@ -164,16 +164,16 @@ function zip_attachment_update(array $event): void
     }
 }
 
-function zip_attachment_render(array $view): string
+function zip_attachment_render(array $view, PluginPreloadContext $preload): string
 {
     $post = $view['post'] ?? []; $viewer = $view['viewer'] ?? null;
     if (empty($post['id'])) return '';
-    $cache =& zip_attachment_request_cache();
-    $files = $cache['files'][(int)$post['id']] ?? [];
+    $attachments = $preload->get('attachments', []);
+    $files = is_array($attachments['files'] ?? null) ? ($attachments['files'][(int)$post['id']] ?? []) : [];
     if (!$files) return '';
     $html = '<section class="plugin-attachments">';
     foreach ($files as $file) {
-        $grant = !empty($cache['grants'][(int)$file['id']]);
+        $grant = !empty($attachments['grants'][(int)$file['id']]);
         $allowed = $viewer && (($viewer['role'] ?? '') === 'admin' || (int)$viewer['id'] === (int)$file['user_id'] || $file['access_mode'] === 'login' || $grant);
         $label = $file['access_mode'] === 'reply' ? '回复后下载' : ($file['access_mode'] === 'points' ? $file['point_cost'].' 积分购买' : '登录后下载');
         $html .= '<article><div><strong>'.e($file['original_name']).'</strong><small>'.e($label).'</small></div>';
@@ -223,7 +223,7 @@ function zip_attachment_external_download(int $id): \LiteBBS\Framework\Response
     if ($file['source_kind'] !== 'remote') fail(400, '该附件不是远程附件');
     $url = (string)$file['remote_url'];
     if (!zip_attachment_remote_url_valid($url)) fail(400, '远程附件地址无效');
-    redirect_external_https($url, 303);
+    return (new \LiteBBS\Framework\Response('', 303))->header('Location', $url);
 }
 
 function zip_attachment_validate_archive(string $path, int $compressedBytes): void

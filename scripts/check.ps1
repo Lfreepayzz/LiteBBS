@@ -1,249 +1,198 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+$app = Join-Path $root 'app'
+$expected = @('admin.php', 'core.php', 'kernel.php', 'plugin.php', 'scanner.php', 'share.php', 'template.php', 'update.php', 'version.php')
+$actual = @(Get-ChildItem -LiteralPath $app -File -Filter '*.php' | ForEach-Object Name | Sort-Object)
+
+if ($actual.Count -ne $expected.Count -or (Compare-Object $actual $expected)) {
+    throw 'app must contain exactly admin.php, core.php, kernel.php, plugin.php, scanner.php, share.php, template.php, update.php, and version.php.'
+}
 
 function Require-Text([string]$RelativePath, [string]$Text, [string]$Message) {
     $path = Join-Path $root $RelativePath
     if (-not (Test-Path -LiteralPath $path)) { throw "Missing $RelativePath" }
-    $content = [System.IO.File]::ReadAllText($path)
-    if (-not $content.Contains($Text)) { throw $Message }
+    if (-not ([System.IO.File]::ReadAllText($path)).Contains($Text)) { throw $Message }
 }
 
-function Require-Match([string]$RelativePath, [string]$Pattern, [string]$Message) {
-    $path = Join-Path $root $RelativePath
-    if (-not (Test-Path -LiteralPath $path)) { throw "Missing $RelativePath" }
-    $content = [System.IO.File]::ReadAllText($path)
-    if ($content -notmatch $Pattern) { throw $Message }
+Require-Text 'app/kernel.php' "__DIR__.'/core.php'" 'Kernel must load the single core file.'
+Require-Text 'app/kernel.php' "__DIR__.'/version.php'" 'Kernel must load the version file.'
+Require-Text 'app/version.php' 'LITEBBS_VERSION' 'Version constant is missing.'
+Require-Text 'app/core.php' "require_once __DIR__.'/admin.php'" 'Core must lazy-load the single admin file.'
+Require-Text 'app/kernel.php' "__DIR__.'/plugin.php'" 'Kernel must load the single plugin runtime.'
+Require-Text 'app/kernel.php' "__DIR__.'/template.php'" 'Kernel must load the single template runtime.'
+Require-Text 'app/kernel.php' "__DIR__.'/share.php'" 'Kernel must load the extension share runtime.'
+Require-Text 'app/share.php' 'final class ExtensionShareService' 'Extension sharing must use its dedicated service.'
+Require-Text 'app/share.php' "FORUM_ORIGIN = 'https://bolgk.eu.org'" 'Extension sharing must use its trusted forum origin.'
+Require-Text 'assets/js/admin-forum-share.js' 'await response.text()' 'Share creation failures must expose the server-safe diagnostic message.'
+Require-Text 'app/kernel.php' "dirname(__DIR__).'/404.php'" 'Kernel must load the root 404 response module.'
+Require-Text '404.php' 'litebbs_not_found_response' 'Root 404 response module is missing.'
+Require-Text '404.php' 'LiteBBSNotFound' 'Root 404 message catalog is missing.'
+Require-Text '404.php' 'litebbs_error_response' 'Root error response factory is missing.'
+Require-Text 'app/admin.php' "__DIR__.'/update.php'" 'Admin dispatcher must lazy-load the update runtime.'
+Require-Text 'app/admin.php' "__DIR__.'/scanner.php'" 'Admin dispatcher must lazy-load the security scanner runtime.'
+Require-Text 'app/scanner.php' 'extension_security_scan_all' 'Extension security scanner is missing.'
+Require-Text 'assets/css/admin-scanner.css' '.security-console' 'Security scanner console styles are missing.'
+Require-Text 'assets/js/admin-scanner.js' 'data-security-scan-form' 'Security scanner submission progress is missing.'
+Require-Text 'app/scanner.php' "'extensions'=>['js']" 'JavaScript scanner rules must be limited to JavaScript files.'
+Require-Text 'plugins/eicar-scan-test/scanner-test.txt' 'LITEBBS-SCANNER-TEST-MARKER' 'Harmless scanner test marker is missing.'
+Require-Text 'app/scanner.php' 'www.virustotal.com/api/v3/files/' 'VirusTotal hash lookup is missing.'
+Require-Text 'app/scanner.php' "'malicious'" 'VirusTotal malware verdict handling is missing.'
+Require-Text 'app/admin.php' 'virustotal_api_key' 'VirusTotal API key configuration is missing.'
+Require-Text 'app/scanner.php' "'limit'=>4" 'VirusTotal request rate limit is missing.'
+Require-Text 'app/scanner.php' 'extension_security_virustotal_malicious_threshold' 'VirusTotal multi-engine confirmation threshold is missing.'
+Require-Text 'app/scanner.php' 'mb-api.abuse.ch/api/v1/' 'MalwareBazaar hash lookup is missing.'
+Require-Text 'app/admin.php' 'security_scanner_provider' 'Online scanner provider selection is missing.'
+Require-Text 'app/admin.php' 'malwarebazaar_api_key' 'MalwareBazaar API key configuration is missing.'
+Require-Text 'app/admin.php' "`$actionForm(`$name, 'purge'" 'Disabled plugins must expose a permanent deletion action.'
+Require-Text 'app/scanner.php' 'security_scanner_enabled' 'Security scanner must require its site setting.'
+Require-Text 'app/admin.php' 'security_scanner_enabled' 'Site settings must control the security scanner.'
+Require-Text 'app/update.php' 'app/scanner.php' 'Program update manifest must include the security scanner runtime.'
+Require-Text 'app/core.php' 'final class TransactionManager' 'Core transaction manager is missing.'
+Require-Text 'app/core.php' 'final class AdminAuthorizationMiddleware' 'Core admin authorization middleware is missing.'
+Require-Text 'app/core.php' 'final class PluginRequestMiddleware' 'Core plugin request middleware is missing.'
+Require-Text 'app/core.php' 'register_application_routes' 'Core route registration is missing.'
+Require-Text 'app/core.php' 'process_notification_outbox' 'Core notification worker is missing.'
+Require-Text 'app/core.php' 'process_outbox_events' 'Core extension outbox worker is missing.'
+Require-Text 'app/admin.php' 'handle_backend_routes' 'Admin dispatcher is missing.'
+Require-Text 'app/admin.php' 'render_admin_layout' 'Admin layout is missing.'
+Require-Text 'app/plugin.php' 'interface LiteBBSPlugin' 'Plugin contract is missing.'
+Require-Text 'app/plugin.php' 'extension_plugin_asset_response' 'Plugin asset runtime is missing.'
+Require-Text 'app/plugin.php' 'plugin_apply_migrations' 'Plugin migration runtime is missing.'
+Require-Text 'app/plugin.php' 'extension_request_before' 'Plugin request middleware runtime is missing.'
+Require-Text 'app/plugin.php' 'extension_require_asset' 'Plugin conditional asset runtime is missing.'
+Require-Text 'app/plugin.php' 'ContentDraft' 'Plugin command draft runtime is missing.'
+Require-Text 'app/plugin.php' 'PostAction' 'Plugin post action runtime is missing.'
+Require-Text 'app/plugin.php' 'ProfileTab' 'Plugin profile tab runtime is missing.'
+Require-Text 'app/plugin.php' 'NotificationTab' 'Plugin notification tab runtime is missing.'
+Require-Text 'app/plugin.php' 'NavigationLink' 'Plugin navigation link runtime is missing.'
+Require-Text 'app/plugin.php' 'extension_manifest_extension_flags' 'Plugin extension declaration validation is missing.'
+Require-Text 'app/plugin.php' 'extension_emit_signal' 'Plugin signal runtime is missing.'
+Require-Text 'app/plugin.php' 'PluginSignalRegistrar' 'Plugin signal registrar is missing.'
+Require-Text 'app/plugin.php' 'Pending migrations require administrator approval.' 'Plugin migrations must be approved by an administrator, not a CLI script.'
+Require-Text 'app/plugin.php' 'extension_apply_profile_command' 'Plugin profile command runtime is missing.'
+Require-Text 'app/plugin.php' 'PostUpdateDraft' 'Plugin post update command draft is missing.'
+Require-Text 'app/plugin.php' 'DeleteRequest' 'Plugin delete request contract is missing.'
+Require-Text 'app/plugin.php' 'PolicyContext' 'Plugin policy context is missing.'
+Require-Text 'app/plugin.php' 'PolicyDecision' 'Plugin policy decision contract is missing.'
+Require-Text 'app/plugin.php' 'extension_authorize' 'Plugin policy runtime is missing.'
+Require-Text 'app/plugin.php' 'extension_render_post_actions' 'Plugin post action renderer is missing.'
+Require-Text 'app/plugin.php' 'extension_profile_tabs' 'Plugin profile tab renderer is missing.'
+Require-Text 'app/plugin.php' 'extension_notification_tabs' 'Plugin notification tab renderer is missing.'
+Require-Text 'app/plugin.php' 'extension_has_active_slots' 'Plugin slot page-cache safety check is missing.'
+Require-Text 'app/plugin.php' "'category.view'" 'Category read policy is missing.'
+Require-Text 'app/plugin.php' "'attachment.download'" 'Attachment download policy is missing.'
+Require-Text 'app/plugin.php' "'topic.deleting.v2'" 'Strict topic deletion lifecycle event is missing.'
+Require-Text 'app/plugin.php' "'post.deleting.v2'" 'Strict post deletion lifecycle event is missing.'
+Require-Text 'app/plugin.php' 'extension_permits' 'Non-throwing extension policy evaluation is missing.'
+Require-Text 'app/plugin.php' 'AvatarProvider' 'Avatar provider extension API is missing.'
+Require-Text 'app/plugin.php' 'extension_avatar_url' 'Avatar provider resolver is missing.'
+Require-Text 'app/plugin.php' 'SeoContribution' 'Structured SEO extension API is missing.'
+Require-Text 'app/plugin.php' 'AuthenticationDecision' 'Authentication challenge extension API is missing.'
+Require-Text 'app/plugin.php' 'extension_authentication_pending' 'Authentication challenge state API is missing.'
+Require-Text 'app/plugin.php' 'extension_authentication_complete' 'Authentication challenge completion API is missing.'
+Require-Text 'app/plugin.php' 'PluginSeoRegistrar' 'Structured SEO provider registrar is missing.'
+Require-Text 'app/plugin.php' 'PluginAuthenticationRegistrar' 'Authentication provider registrar is missing.'
+Require-Text 'app/template.php' 'core_page_assets' 'Core conditional asset runtime is missing.'
+Require-Text 'plugins/zip-remote-attachments/src/Plugin.php' 'zip_attachment_validate_archive' 'Attachment plugin ZIP validation is missing.'
+Require-Text 'plugins/zip-remote-attachments/src/Plugin.php' 'zip_attachment_remote_url_valid' 'Attachment plugin remote URL validation is missing.'
+Require-Text 'app/plugin.php' 'extension_search' 'Plugin search aggregation is missing.'
+Require-Text 'app/plugin.php' 'login.form.fields.after' 'Login form extension slot is missing.'
+Require-Text 'app/plugin.php' 'register.form.fields.after' 'Registration form extension slot is missing.'
+Require-Text 'app/plugin.php' 'member.profile.form.after' 'Member profile extension slot is missing.'
+Require-Text 'app/plugin.php' 'CoreReadRepository' 'Plugin core read repository is missing.'
+Require-Text 'app/plugin.php' 'PluginUrlGenerator' 'Plugin URL generator is missing.'
+Require-Text 'app/core.php' "extension_authorize('profile.view'" 'Public profile policy integration is missing.'
+Require-Text 'app/core.php' 'extension_apply_update_command' 'Post update command integration is missing.'
+Require-Text 'app/core.php' 'extension_apply_delete_command' 'Delete command integration is missing.'
+Require-Text 'app/core.php' "extension_slot('topic.thread.before'" 'Topic thread-before extension slot is not rendered.'
+Require-Text 'app/template.php' 'theme_render_standard' 'Template render runtime is missing.'
+Require-Text 'app/template.php' 'theme_render_page' 'Theme page fallback runtime is missing.'
+Require-Text 'app/template.php' 'template_pagination_fallback' 'Template pagination fallback is missing.'
+Require-Text 'app/template.php' "'content_before'" 'Theme content slot contract is missing.'
+Require-Text 'app/template.php' 'final class ThemePartials' 'Theme partial rendering API is missing.'
+Require-Text 'app/template.php' "`$relative = 'partials/'" 'Theme partial paths must remain package-local.'
+Require-Text 'app/core.php' 'template_unavailable_document' 'Missing-template response is missing.'
+Require-Text 'app/core.php' "<meta name=`"robots`" content=`"noindex`">" 'Missing-template response must not be indexable.'
+Require-Text 'app/admin.php' 'function admin_schema_sync' 'Incremental schema synchronizer is missing.'
+Require-Text 'app/admin.php' 'function admin_schema_sync_report' 'Schema difference report is missing.'
+Require-Text 'app/admin.php' 'incremental-schema-sync' 'Admin database upgrade must audit schema synchronization.'
+Require-Text 'app/update.php' 'handle_admin_program_update' 'Program update handler is missing.'
+
+# Public and internal pagination must remain keyset-based. OFFSET and MySQL's
+# LIMIT offset,count both degrade as tables grow and are forbidden everywhere.
+$offsetPatterns = @('\bOFFSET\s+\d', '\bLIMIT\s+(?:\d+|\?)\s*,\s*(?:\d+|\?)')
+foreach ($sourceFile in Get-ChildItem -LiteralPath $root -Recurse -File -Include '*.php', '*.sql') {
+    $source = [System.IO.File]::ReadAllText($sourceFile.FullName)
+    foreach ($pattern in $offsetPatterns) {
+        if ($source -match $pattern) { throw "Offset pagination is forbidden: $($sourceFile.FullName)" }
+    }
 }
 
-Require-Text 'index.php' 'Framework\Kernel' 'Application kernel is missing.'
-Require-Text 'index.php' 'app/application-routes.php' 'Application routes must register directly with the kernel router.'
-Require-Text 'app/application.php' 'final class TransactionManager' 'The application transaction boundary is missing.'
-Require-Text 'app/application.php' 'final class AuditLogger' 'The centralized audit service is missing.'
-Require-Text 'app/application.php' 'final class AccountRegistrationService' 'Account registration must have an explicit service boundary.'
-Require-Text 'app/application.php' 'public const MIN_CHARACTERS = 6;' 'Password policy minimum must remain six characters.'
-Require-Text 'app/application.php' 'public const MAX_BYTES = 12;' 'Password policy maximum must remain twelve bytes.'
-Require-Text 'install.php' 'PasswordPolicy::accepts($password)' 'Installer must use the shared password policy.'
-Require-Text 'app/application.php' 'final class AdminAuthorizationMiddleware' 'The administration authorization middleware is missing.'
-Require-Text 'app/application.php' 'final class RequestObservabilityMiddleware' 'The request observability middleware is missing.'
-Require-Text 'app/framework.php' 'interface Middleware' 'Framework middleware must use an explicit object contract.'
-Require-Text 'app/application.php' 'AdminAuthorizationMiddleware implements Middleware' 'Admin authorization must implement the middleware contract.'
-Require-Text 'app/application.php' 'RequestObservabilityMiddleware implements Middleware' 'Request observation must implement the middleware contract.'
-Require-Text 'index.php' 'AdminAuthorizationMiddleware' 'The kernel must register administration authorization middleware.'
-Require-Text 'index.php' 'RequestObservabilityMiddleware' 'The kernel must register request observability middleware.'
-Require-Text 'app/application-routes.php' 'LegacyActionController' 'Application routes must use the transitional controller adapter.'
-Require-Text 'index.php' 'home:v7:' 'Cursor-aware home feed cache key is missing.'
-Require-Text 'index.php' 'home-page:v9:' 'Anonymous homepage response cache is missing.'
-Require-Text 'index.php' 'page_cache_read($pageCacheKey,120)' 'Homepage response cache must use the configured two-minute lifetime.'
-Require-Text 'app/reply-handler.php' 'notification_outbox' 'Replies must write notification work in their transaction.'
-if (([System.IO.File]::ReadAllText((Join-Path $root 'app/reply-handler.php'))).Contains('process_notification_outbox(1)')) { throw 'Web replies must not synchronously drain notification outbox.' }
-Require-Text 'app/notifications.php' 'FOR UPDATE SKIP LOCKED' 'Outbox processor must safely claim work.'
-Require-Text 'app/outbox.php' 'FOR UPDATE SKIP LOCKED' 'Generic extension outbox must safely claim work.'
-Require-Text 'app/outbox.php' 'failed_outbox_events' 'Generic extension outbox requires a dead-letter queue.'
-Require-Text 'scripts/notifications-worker.php' 'process_notification_outbox' 'CLI worker must use shared outbox processing.'
-Require-Text 'scripts/outbox-worker.php' 'process_outbox_events' 'CLI worker must process generic extension events.'
-Require-Text 'database/schema.sql' 'CREATE TABLE notification_outbox' 'Fresh schema is missing the notification outbox.'
-Require-Text 'database/schema.sql' 'CREATE TABLE outbox_events' 'Fresh schema is missing the generic extension outbox.'
-Require-Text 'database/schema.sql' 'uq_outbox_event_key' 'Fresh schema must use the canonical outbox event key index.'
-Require-Text 'database/schema.sql' 'CREATE TABLE topic_participants' 'Fresh schema is missing topic participants.'
-Require-Text 'install.php' "'topic_participants'" 'Installer database recovery allowlist is missing a schema table.'
-Require-Text 'scripts/migrate.php' 'ix_outbox_claim_ready' 'Upgrade-created outbox table is missing the ready index.'
-Require-Text 'scripts/migrate.php' 'ix_failed_outbox_event_failed' 'Upgrade-created dead-letter table is missing the cleanup index.'
-Require-Text 'scripts/migrate.php' 'ix_extension_jobs_claim_ready' 'Upgrade-created extension job table is missing the ready index.'
-Require-Text 'scripts/migrate.php' 'ix_extension_job_failures_failed' 'Upgrade-created extension failure table is missing the cleanup index.'
-Require-Text 'scripts/migrate.php' 'SELECT id,post_id,user_id,source_kind,storage_name,remote_url,original_name,file_size,sha256,access_mode,point_cost,status,created_at FROM plugin_zip_remote_attachments_files' 'Legacy attachment migration must map file columns explicitly.'
-Require-Text 'scripts/migrate.php' 'SELECT user_id,attachment_id,grant_kind,created_at FROM plugin_zip_remote_attachments_grants' 'Legacy attachment migration must map grant columns explicitly.'
-Require-Text 'scripts/migrate.php' 'notification_outbox' 'Upgrade migration is missing the notification outbox.'
-Require-Text 'plugins/zip-remote-attachments/plugin.json' '"schema": 1' 'Attachment plugin must use the independent plugin format.'
-Require-Text 'templates/default/theme.json' '"name": "default"' 'Default theme manifest is missing.'
-Require-Text 'app/extension-framework.php' 'PluginContext' 'Versioned plugin API is missing.'
-Require-Text 'app/extension-framework.php' 'extension_plugin_asset_response' 'V2 plugin asset delivery is missing.'
-Require-Text 'index.php' '/plugin-assets/' 'Plugin assets must be served through the kernel router.'
-Require-Text 'app/extension-framework.php' 'Plugin state-changing routes must be POST-only.' 'Plugin write routes must be POST-only.'
-Require-Text 'app/extension-framework.php' '$key = $baseKey' 'Plugin cache invalidation must version cache keys.'
-Require-Text 'app/extensions-security.php' 'extension_class_name_valid' 'Plugin class validation helper is missing.'
-Require-Text 'app/extensions-security.php' 'extension_manifest_admin_path' 'Plugin admin path validation is missing.'
-Require-Text 'app/extensions-security.php' 'extension_v2_entry_file' 'Plugin entry containment validation is missing.'
-if (([System.IO.File]::ReadAllText((Join-Path $root 'app/extensions-security.php'))).Contains('$resolvedCache = []')) { throw 'Secure runtime paths must not be cached across requests.' }
-Require-Text 'app/extension-framework.php' '$entryFile = extension_v2_entry_file' 'Plugin runtime must resolve entries inside their plugin directory.'
-Require-Text 'app/framework.php' 'catch (ResponseHalt $halt)' 'Kernel must translate route halts into responses.'
-Require-Text 'app/theme-runtime.php' 'theme_runtime_assets' 'Theme runtime asset registry is missing.'
-Require-Text 'app/read-model.php' 'topic_page_viewer_state' 'Topic page batch read model is missing.'
-Require-Text 'app/extension-framework.php' 'extension_preload' 'Plugin page preload API is missing.'
-Require-Text 'app/extension-framework.php' 'plugin-degraded' 'Plugin fault isolation is missing.'
-Require-Text 'app/extension-framework.php' 'Plugin slot output exceeds 1 MiB.' 'Plugin slot output must be bounded.'
-Require-Text 'plugins/zip-remote-attachments/src/Plugin.php' 'zip_attachment_preload' 'Attachment plugin batch preload is missing.'
-Require-Text 'plugins/zip-remote-attachments/src/Plugin.php' 'zip_attachment_check_user_quota' 'Attachment plugin per-user storage quota is missing.'
-Require-Text 'plugins/zip-remote-attachments/src/Plugin.php' '$db->beginTransaction();' 'Attachment quota checks and metadata writes must be transactional.'
-Require-Text 'plugins/zip-remote-attachments/src/Plugin.php' 'if ($storedPath !== null) @unlink($storedPath);' 'Failed attachment metadata writes must remove the uploaded file.'
-Require-Text 'plugins/zip-remote-attachments/src/Plugin.php' 'external-download' 'Remote attachment downloads must require an external-site confirmation POST.'
-Require-Text 'app/builtin-plugin-schema.php' 'ix_plg_zip_remote_attachments_user_storage' 'Attachment quota query index is missing.'
-Require-Text 'app/builtin-plugin-schema.php' 'ix_plg_zip_remote_attachments_storage' 'Attachment storage cleanup index is missing.'
-Require-Text 'app/read-pages.php' 'category:v7:' 'Category feed cursor cache key is missing.'
-Require-Text 'app/read-pages.php' 'page_cache_read($pageCacheKey, 120)' 'Category response cache must use the configured two-minute lifetime.'
-Require-Text 'app/read-pages.php' 'LIMIT ''.($pageSize+1)' 'Category cursor pagination must use bounded batches.'
-Require-Text 'index.php' 'LIMIT ''.($pageSize+1)' 'Home cursor pagination must use bounded batches.'
-Require-Text 'index.php' '$rows = $cursorData === null ? cached($key, 120, $loadRows) : $loadRows();' 'Home feed first page must cache its bounded rows.'
-$homeSource = [System.IO.File]::ReadAllText((Join-Path $root 'index.php'))
-if ($homeSource -match '\bOFFSET\b') { throw 'Home feed rows must not use OFFSET pagination.' }
-if (([System.IO.File]::ReadAllText((Join-Path $root 'app/read-pages.php'))) -match '\bOFFSET\b') { throw 'Read pages must not use OFFSET pagination.' }
-Require-Text 'app/application-routes.php' 'register_application_routes' 'Application routes must register with the kernel router.'
-Require-Text 'app/core.php' 'redis_cache_client' 'Shared Redis adapter is missing.'
-Require-Text 'app/core.php' 'function cache_versions' 'Batched cache version reads are missing.'
-Require-Text 'app/core.php' 'function remove_tree' 'Shared extension removal helper is missing.'
-Require-Text 'app/core.php' 'using local invalidation' 'Cache invalidation must fall back locally when Redis fails.'
-Require-Text 'app/core.php' "active-lock-'.hash('sha256',`$key)" 'Local cache locks must be isolated per cache key.'
-Require-Match 'scripts/cleanup.php' 'active-lock-\[a-f0-9\]\{3,64\}' 'Scheduled cleanup must remove stale local cache locks.'
-Require-Text 'app/market.php' "action==='cleanup_cache_locks'" 'Program update page must provide manual cache lock cleanup.'
-Require-Text 'app/core.php' 'function clean_old_cache_locks' 'Cache lock cleanup must use the shared bounded cleanup helper.'
-Require-Text 'deployment/README.md' 'Redis latency' 'Shared Redis operations must be documented.'
-Require-Text 'scripts/flush-topic-views.php' 'hGetAll' 'Topic view aggregation worker is missing.'
-Require-Text 'scripts/flush-topic-views.php' 'topic_view_flush_batches' 'Topic view aggregation must be idempotent after worker failure.'
-Require-Text 'scripts/cleanup.php' 'topic_view_flush_batches' 'Topic view batch ledger cleanup is missing.'
-Require-Text 'app/plugin-topic.php' 'LOCK IN SHARE MODE' 'Topic creation must recheck category visibility inside its transaction.'
-Require-Text 'app/core.php' 'topic-view-seen' 'Topic view Redis deduplication is missing.'
-Require-Text 'app/core.php' "'path'=>'/t/'" 'Anonymous topic-view cookies must not fragment listing-page cache variants.'
-Require-Text 'app/reply-handler.php' 'invalidate_topic_read_cache($topicId, (int)$topic[''category_id''], false, false)' 'Replies must avoid invalidating listing and sitemap caches on every write.'
-Require-Text 'scripts/cleanup.php' 'time() - 172800' 'Expired cache values must be reclaimed by scheduled cleanup.'
-Require-Text 'app/community.php' 'WHERE user_id=? AND topic_id=? FOR UPDATE' 'Bookmarks and subscriptions must lock only their relation record.'
-Require-Text 'app/community.php' 'WHERE user_id=? AND post_id=? AND reaction="like" FOR UPDATE' 'Likes must lock only their relation record.'
-Require-Text 'app/core.php' "cache/topic-views" 'Topic view fallback must not update the hot database row in web requests.'
-if (([System.IO.File]::ReadAllText((Join-Path $root 'app/core.php'))) -match "anonymous_topic_view_is_new\(`$id\)\)h\('UPDATE topics SET view_count") { throw 'Web requests must aggregate local topic views instead of updating the hot topic row.' }
-Require-Text 'app/core.php' 'SELECT created_at FROM posts WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 1' 'Post interval must use successful posts.'
-Require-Text 'app/core.php' 'function enforce_content_rate_limit' 'Content rate limits must be configurable.'
-Require-Text 'app/core.php' "setting(`$kind.'_rate_max','0')" 'Content rate limits must be disabled by default.'
-Require-Text 'app/plugin-topic.php' "enforce_content_rate_limit('topic'" 'Topic creation must use the configured rate limit.'
-Require-Text 'app/reply-handler.php' "enforce_content_rate_limit('reply'" 'Replies must use the configured rate limit.'
-Require-Text 'app/admin-users-settings.php' 'topic_rate_window' 'Topic rate-limit settings are missing from administration.'
-Require-Text 'app/admin-users-settings.php' 'reply_rate_window' 'Reply rate-limit settings are missing from administration.'
-Require-Text 'app/core.php' 'function clear_session_cookie' 'Invalid sessions must clear their stale browser cookie.'
-Require-Text 'app/core.php' 'function topic_last_post_pointer_available' 'Database schema compatibility guard is missing.'
-Require-Text 'app/core.php' 'function migrate_topic_last_post_pointer' 'Administrator database migration service is missing.'
-Require-Text 'app/core.php' 'function migrate_private_messages_sender_index' 'Private-message sender index migration service is missing.'
-Require-Text 'app/core.php' 'function migrate_topic_participants' 'Topic participant migration service is missing.'
-Require-Text 'app/core.php' 'function migrate_topic_search_prefix_index' 'Topic search prefix index migration service is missing.'
-Require-Text 'app/market.php' 'migrate_database' 'Administrators must be able to run a pending database optimization migration.'
-Require-Text 'app/market.php' 'catch (\LiteBBS\Framework\ResponseHalt $halt) { throw $halt; }' 'Database migration redirect must not be reported as an error.'
-Require-Text 'database/schema.sql' 'last_post_id' 'Topic last-post pointer is missing from the fresh schema.'
-Require-Text 'scripts/migrate.php' '3.2.0-last-post-pointer' 'Topic last-post pointer migration is missing.'
-Require-Text 'database/schema.sql' 'ix_messages_sender' 'Fresh schema is missing the private-message sender index.'
-Require-Text 'scripts/migrate.php' 'ix_messages_sender' 'Upgrade migration is missing the private-message sender index.'
-Require-Text 'database/schema.sql' 'ix_messages_conversation_reverse' 'Fresh schema is missing the reverse private-message conversation index.'
-Require-Text 'scripts/migrate.php' 'ix_messages_conversation_reverse' 'Upgrade migration is missing the reverse private-message conversation index.'
-Require-Text 'app/messages.php' 'UNION ALL' 'Private-message reads must avoid an OR scan across both directions.'
-Require-Text 'database/schema.sql' 'CREATE TABLE topic_participants' 'Fresh schema is missing topic participants.'
-Require-Text 'scripts/migrate.php' 'topic_participants' 'Upgrade migration is missing topic participants.'
-Require-Text 'database/schema.sql' 'ix_topics_search_prefix' 'Fresh schema is missing the topic search prefix index.'
-Require-Text 'scripts/migrate.php' 'ix_topics_search_prefix' 'Upgrade migration is missing the topic search prefix index.'
-Require-Text 'app/notifications.php' 'topic_participants' 'Notification fan-out must use topic participants.'
-Require-Text 'app/reply-handler.php' 'last_post_id=GREATEST' 'Replies must maintain the topic last-post pointer.'
-Require-Text 'app/community.php' 'last_post_id=(SELECT id FROM posts' 'Reply deletion must repair the topic last-post pointer.'
-Require-Text 'app/admin-reports.php' 'last_post_id=(SELECT id FROM posts' 'Moderated reply deletion must repair the topic last-post pointer.'
-Require-Text 'app/plugin-migrations.php' 'enabled,config_json' 'Plugin migration must register new extensions disabled.'
-Require-Text 'app/admin-extensions-manage.php' 'extension_plugin_lifecycle' 'Plugin management must use the controlled lifecycle service.'
-Require-Text 'app/extension-platform.php' 'plugin_apply_migrations' 'Plugin enablement must run controlled migrations automatically.'
-Require-Text 'app/plugin-migrations.php' 'VALUES(?,?,0,JSON_OBJECT()' 'Plugin migration must keep code disabled until schema migration succeeds.'
-Require-Text 'app/plugin-migrations.php' 'UPDATE plugins SET version=?,enabled=?' 'Plugin migration must enable code only after schema verification.'
-Require-Text 'deployment/php-fpm.conf.example' 'pm.max_children' 'PHP-FPM capacity baseline is missing.'
-Require-Text 'deployment/opcache.ini.example' 'opcache.validate_timestamps=0' 'Production OPcache baseline is missing.'
-Require-Text 'deployment/README.md' 'queue age' 'Production queue monitoring is missing.'
-Require-Text 'nginx.conf.example' 'SCRIPT_FILENAME $realpath_root/index.php' 'Nginx must send the real front-controller path to PHP-FPM.'
-Require-Text 'nginx.conf.example' 'return 307 /install.php$is_args$args;' 'Nginx install alias must redirect to the real installer script.'
-Require-Text 'nginx.conf.example' '|zip|tar|gz|tgz|rar|7z)' 'Nginx must block source archives in the public root.'
-Require-Text 'baota-nginx.rewrite.example' 'try_files /__litebbs_no_static_files__ /index.php?$query_string;' 'Baota routes must use the fixed front controller.'
-Require-Text 'baota-nginx.rewrite.example' 'index\.php$|install\.php$' 'Baota rules must allow only the two PHP entry points.'
-Require-Text 'baota-nginx.rewrite.example' 'location ^~ /templates/' 'Baota rules must protect theme PHP files before the generic PHP handler.'
-Require-Text 'baota-nginx.rewrite.example' 'location ^~ /plugins/' 'Baota rules must protect plugin PHP files before the generic PHP handler.'
-Require-Text 'baota-nginx.rewrite.example' '/plugin-assets' 'Baota plugin assets must remain dynamic front-controller routes.'
-Require-Text 'baota-nginx.rewrite.example' 'if ($uri ~' 'Baota PHP denial must not depend on location include order.'
-Require-Text 'baota-nginx.rewrite.example' '|zip|tar|gz|tgz|rar|7z)' 'Baota must block source archives in the public root.'
-if (([System.IO.File]::ReadAllText((Join-Path $root 'baota-nginx.rewrite.example'))).Contains('server {')) { throw 'Baota rewrite rules must not contain a server block.' }
-Require-Text '.htaccess' 'RewriteRule ^install\.php$ - [L]' 'Apache must permit the real installer entry point.'
-Require-Text '.htaccess' '|zip|tar|gz|tgz|rar|7z)' 'Apache must block source archives in the public root.'
-Require-Text 'install.php' "form('/install.php'" 'The installer must post to the real installer script.'
-Require-Text 'deployment/README.md' 'No input file specified.' 'FastCGI path troubleshooting is missing.'
-Require-Text 'app/core.php' 'function configure_session' 'Central session configuration is missing.'
-Require-Text 'app/core.php' "session.use_strict_mode','1'" 'Strict PHP session mode is missing.'
-Require-Text 'app/core.php' "load_config()['url']" 'Session cookie security must remain stable behind a TLS proxy.'
-Require-Text 'app/core.php' 'function verify_csrf_token' 'CSRF validation must not create a replacement token.'
-Require-Text 'app/core.php' 'csrf rejected:' 'CSRF failures need safe session diagnostics.'
-Require-Text 'app/core.php' 'migrate_legacy_cookie' 'Existing sessions need a one-time secure cookie migration.'
-Require-Text 'app/core.php' "session_auth_state(`$_SESSION)" 'Anonymous CSRF sessions must not be cleared by authentication checks.'
-Require-Text 'index.php' 'configure_session();' 'The front controller must configure sessions before reading cookies.'
-Require-Text 'scripts/load-test.js' 'anonymous_home_reads' 'Public homepage cache load scenario is missing.'
-Require-Text 'app/reply-handler.php' 'pending_topic_id' 'Notification outbox coalescing is missing.'
-Require-Text 'app/notifications.php' 'coalesce_topic_id' 'Unread topic notification coalescing is missing.'
-Require-Text 'database/schema.sql' '2.8.0-notification-coalescing' 'Notification coalescing migration is missing from the fresh schema.'
-Require-Text 'index.php' 't.id>? AND t.id<=?' 'Sitemap must use primary-key ranges.'
-if (([System.IO.File]::ReadAllText((Join-Path $root 'index.php'))) -match 'sitemap-topics.*OFFSET') { throw 'Sitemap must not use deep OFFSET pagination.' }
-Require-Text 'app/extension-hooks.php' 'post.created.v2' 'Versioned safe extension hooks are missing.'
-Require-Text 'app/theme-runtime.php' 'function theme_resolve_view' 'Unified theme view resolver is missing.'
-Require-Text 'app/extensions-security.php' "extension_secure_runtime_file(`$directory,'layout.php')" 'Theme runtime must resolve the layout through the secure file resolver.'
-Require-Text 'app/extension-framework.php' "'preload'=>'preloads'" 'Manifest preload declarations are missing.'
-Require-Text 'app/extension-framework.php' 'PluginFilterRegistrar' 'Plugin filter API is missing.'
-Require-Text 'app/extension-framework.php' "extension_filter('post.rendered'" 'Rendered post filter is missing.'
-Require-Text 'app/extension-framework.php' 'registration is missing from the manifest declaration.' 'Plugin hook registrations must respect manifest declarations.'
-Require-Text 'app/extension-hooks.php' 'page.content.before' 'Stable page content extension slots are missing.'
-Require-Text 'app/extension-hooks.php' 'topic.header.after' 'Topic header extension slot is missing.'
-Require-Text 'app/extension-hooks.php' 'reply.form.after' 'Reply form extension slot is missing.'
-Require-Text 'app/extension-hooks.php' 'admin.content.before' 'Stable admin extension slots are missing.'
-Require-Text 'app/extension-hooks.php' 'home.feed.before' 'Home feed extension slots are missing.'
-Require-Text 'app/extension-hooks.php' 'topic.thread.after' 'Topic thread extension slots are missing.'
-Require-Text 'app/read-pages.php' "extension_slot('post.before'" 'Post-before extension slot is missing.'
-Require-Text 'index.php' "extension_slot('home.feed.before'" 'Home feed extension slot is missing.'
-Require-Text 'templates/default/layout.php' "extension_slot('page.header.after'" 'Default theme must preserve the page-header extension slot.'
-Require-Text 'templates/default/layout.php' 'seo_head($title, $description, $indexable, $canonical, $c)' 'Default theme must preserve SEO metadata.'
-Require-Text 'app/admin-layout.php' "extension_slot('admin.navigation'" 'Admin extension navigation slot is missing.'
-Require-Text 'app/extension-platform.php' 'function extension_plugin_lifecycle' 'Complete plugin lifecycle is missing.'
-Require-Text 'app/extension-platform.php' 'function extension_purge_plugin' 'Invalid plugins need a complete permanent cleanup service.'
-Require-Text 'app/admin-extensions-manage.php' "if (`$action === 'purge')" 'Invalid plugins need a confirmed permanent cleanup action.'
-Require-Text 'app/admin-extensions-manage.php' 'extension_purge_plugin($name)' 'Permanent plugin cleanup must remove database remnants.'
-Require-Text 'app/extension-platform.php' "in_array(`$action, ['install','upgrade','enable'], true)" 'Disabling an orphaned plugin must not require its missing manifest.'
-Require-Text 'app/admin-extensions-manage.php' "if (!is_dir(`$directory)) plugin_set_enabled_state" 'Orphaned enabled plugins must be disabled before permanent removal.'
-Require-Text 'app/extension-platform.php' 'function extension_dependency_report' 'Plugin dependency resolution is missing.'
-Require-Text 'app/extension-platform.php' 'final class PluginAdminRegistrar' 'Unified plugin administration API is missing.'
-Require-Text 'app/extension-platform.php' "'/admin/plugins?plugin='" 'Unified plugin management page API is missing.'
-Require-Text 'app/extension-framework.php' "if (!empty(`$adminPage['plugin_management'])) continue;" 'Plugin management pages must not register independent routes.'
-Require-Text 'app/extension-framework.php' 'extension_plugin_management_path' 'Plugin management entry resolution is missing.'
-Require-Text 'app/extension-framework.php' 'extension_plugin_management_page' 'Plugin management page isolation is missing.'
-Require-Text 'app/extension-framework.php' 'built-in namespaces' 'Core routes must bypass plugin route registry scans.'
-Require-Text 'app/extensions-security.php' "'plugin-assets'" 'Plugin prefixes must not claim core asset routes.'
-Require-Text 'app/admin-layout.php' '$showAdminSlots = $pluginManagementPage === null;' 'Plugin management pages must isolate other plugin administration UI.'
-Require-Text 'app/admin-layout.php' 'admin-confirm.css' 'Plugin confirmation styles must load in the administration layout.'
-Require-Text 'app/admin-extensions-manage.php' 'plugin-confirm-option' 'Plugin uninstall confirmation needs a structured data retention option.'
-Require-Text 'app/extension-platform.php' 'final class PluginForm' 'Plugin form API is missing.'
-Require-Text 'app/extension-platform.php' 'function extension_schedule_tasks' 'Recurring plugin task scheduling is missing.'
-Require-Text 'app/extension-platform.php' 'function extension_replay_failed_job' 'Plugin dead-letter replay is missing.'
-Require-Text 'app/extension-platform.php' 'function extension_metric_snapshot' 'Plugin metrics API is missing.'
-Require-Text 'app/extension-platform.php' 'function extension_markdown_renderer_diagnostics' 'Markdown renderer conflict diagnostics are missing.'
-Require-Text 'app/extension-hooks.php' 'extension_validate_async_event_payload' 'Strict versioned async event contracts are missing.'
-Require-Text 'app/theme-runtime.php' 'function theme_view_contracts' 'Standard theme view contracts are missing.'
-Require-Text 'app/theme-runtime.php' 'ThemeTrustedHtml' 'Trusted theme HTML contract is missing.'
-Require-Text 'app/theme-runtime.php' 'function theme_manifest_settings' 'Theme settings manifest support is missing.'
-Require-Text 'app/admin-extensions-manage.php' "action === 'save-settings'" 'Theme settings save flow is missing.'
-Require-Text 'app/admin-extensions-manage.php' '/admin/themes?theme=' 'Theme management panel link is missing.'
-Require-Text 'app/extension-platform.php' 'final class PluginUploads' 'Controlled plugin upload API is missing.'
-Require-Text 'app/extension-platform.php' 'final class PluginNotifications' 'Controlled plugin notification API is missing.'
-Require-Text 'app/extension-platform.php' 'plugin_search_documents' 'Controlled plugin search index API is missing.'
-Require-Text 'app/extension-platform.php' 'final class PluginUserFields' 'Controlled plugin user-field API is missing.'
-Require-Text 'database/schema.sql' '3.0.0-extension-platform' 'Extension platform schema migration is missing.'
-Require-Text 'scripts/extension-worker.php' 'extension_process_jobs' 'Extension task worker is missing.'
-Require-Text 'app/extension-platform.php' 'FOR UPDATE SKIP LOCKED' 'Extension task worker must claim jobs without worker contention.'
-Require-Text 'deployment/README.md' 'MySQL 8.0' 'Minimum database version is not documented.'
-if (([System.IO.File]::ReadAllText((Join-Path $root 'scripts/migrate.php'))).Contains('DROP TABLE post_attachments')) { throw 'Legacy attachment tables must not be dropped without verified migration.' }
+$pluginRoot = Join-Path $root 'plugins'
+if (Test-Path -LiteralPath $pluginRoot) {
+    foreach ($manifestFile in Get-ChildItem -LiteralPath $pluginRoot -Filter 'plugin.json' -Recurse -File) {
+        try {
+            $manifest = [System.IO.File]::ReadAllText($manifestFile.FullName, [System.Text.Encoding]::UTF8) | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            throw "Invalid UTF-8 plugin JSON: $($manifestFile.FullName)"
+        }
+        $pluginDirectory = Split-Path -Parent $manifestFile.FullName
+        $pluginId = Split-Path -Leaf $pluginDirectory
+        if ([string]$manifest.id -ne $pluginId) { throw "Plugin ID must match its directory: $pluginId" }
+            if (@($manifest.permissions).Count -ne @($manifest.permissions | Select-Object -Unique).Count) { throw "Plugin permissions must not contain duplicates: $pluginId" }
+        foreach ($permission in @($manifest.permissions)) {
+            if ($permission -notin @('database', 'storage', 'routes', 'views', 'assets', 'security')) { throw "Invalid plugin permission '$permission': $pluginId" }
+        }
+        if ($null -ne $manifest.autoload) {
+            foreach ($property in @($manifest.autoload.PSObject.Properties)) {
+                if ($property.Name -notmatch '^[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*\\$' -or [string]$property.Value -notmatch '^src(?:/[A-Za-z0-9_-]+)*/$') {
+                    throw "Invalid plugin autoload declaration: $pluginId"
+                }
+            }
+        }
+        foreach ($asset in @($manifest.assets)) {
+            $assetPath = if ($asset -is [string]) { $asset } else { [string]$asset.path }
+            if ($assetPath -eq '' -or $assetPath -match '(^|[\\/])\.\.([\\/]|$)' -or -not (Test-Path -LiteralPath (Join-Path $pluginDirectory $assetPath) -PathType Leaf)) {
+                throw "Declared plugin asset is missing or unsafe: $pluginId/$assetPath"
+            }
+        }
+    }
+}
+
+$themeRoot = Join-Path $root 'templates'
+if (Test-Path -LiteralPath $themeRoot) {
+    foreach ($manifestFile in Get-ChildItem -LiteralPath $themeRoot -Filter 'theme.json' -Recurse -File) {
+        try {
+            $themeManifest = [System.IO.File]::ReadAllText($manifestFile.FullName, [System.Text.Encoding]::UTF8) | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            throw "Invalid UTF-8 theme JSON: $($manifestFile.FullName)"
+        }
+        $themeDirectory = Split-Path -Parent $manifestFile.FullName
+        if ([string]$themeManifest.entry -ne 'layout.php' -or -not (Test-Path -LiteralPath (Join-Path $themeDirectory 'layout.php') -PathType Leaf)) {
+            throw "Theme layout is missing or invalid: $themeDirectory"
+        }
+    }
+}
 
 $php = Get-Command php -ErrorAction SilentlyContinue
 if ($php) {
-    Get-ChildItem -LiteralPath $root -Recurse -Filter '*.php' | ForEach-Object {
-        & $php.Source -l $_.FullName
-        if ($LASTEXITCODE -ne 0) { throw "PHP lint failed: $($_.FullName)" }
+    $lintFiles = @(
+        Get-Item -LiteralPath (Join-Path $root 'index.php'), (Join-Path $root 'install.php')
+        Get-ChildItem -LiteralPath $app -File -Filter '*.php'
+        Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File -Filter '*.php'
+    )
+    if (Test-Path -LiteralPath $themeRoot) { $lintFiles += Get-ChildItem -LiteralPath $themeRoot -File -Filter '*.php' -Recurse }
+    if (Test-Path -LiteralPath $pluginRoot) { $lintFiles += Get-ChildItem -LiteralPath $pluginRoot -File -Filter '*.php' -Recurse }
+    $testRoot = Join-Path $root 'tests'
+    if (Test-Path -LiteralPath $testRoot) { $lintFiles += Get-ChildItem -LiteralPath $testRoot -File -Filter '*.php' -Recurse }
+    foreach ($file in $lintFiles) {
+        & $php.Source -l $file.FullName
+        if ($LASTEXITCODE -ne 0) { throw "PHP lint failed: $($file.Name)" }
     }
-    $testDirectory = Join-Path $root 'tests'
-    if (Test-Path -LiteralPath $testDirectory) { Get-ChildItem -LiteralPath $testDirectory -Filter '*.php' | ForEach-Object {
-        & $php.Source $_.FullName
-        if ($LASTEXITCODE -ne 0) { throw "Test failed: $($_.Name)" }
-    } }
+    & $php.Source (Join-Path $PSScriptRoot 'check-extension-surfaces.php')
+    if ($LASTEXITCODE -ne 0) { throw 'Extension surface checks failed.' }
 } else {
-    Write-Warning "php was not found; PHP lint and tests were skipped."
+    Write-Warning 'php was not found; PHP lint was skipped.'
 }
 
-Write-Output "Structural checks passed."
+Write-Output 'Application structure and plugin manifest checks passed.'

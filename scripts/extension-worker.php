@@ -1,14 +1,8 @@
 <?php
 declare(strict_types=1);
 if(PHP_SAPI!=='cli'){http_response_code(403);exit("CLI only\n");}
-require dirname(__DIR__).'/app/config.php';
-require dirname(__DIR__).'/app/core.php';
-require dirname(__DIR__).'/app/extensions-security.php';
-require dirname(__DIR__).'/app/extension-framework.php';
-require dirname(__DIR__).'/app/plugin-migrations.php';
-require dirname(__DIR__).'/app/extension-platform.php';
-require dirname(__DIR__).'/app/outbox.php';
-if (!is_file(config_file())) exit("Private configuration is missing.\n");
+require dirname(__DIR__).'/app/kernel.php';
+if (!is_file(config_file())) exit("Database configuration is missing.\n");
 $serverVersion=(string)db()->getAttribute(PDO::ATTR_SERVER_VERSION);
 $maria=str_contains(strtolower($serverVersion),'mariadb');
 $numeric=preg_match('/[0-9]+(?:\.[0-9]+){1,2}/',$serverVersion,$match)?$match[0]:'0.0.0';

@@ -6,13 +6,6 @@
   box-shadow: 0 1px 6px rgb(61 50 35 / 9%);
 }
 
-/* Aurora keeps built-in cards and this plugin in one grid sidebar. */
-.aurora-sidebar .aurora-aside { order: 1; }
-.aurora-sidebar .aurora-categories { order: 2; }
-.aurora-sidebar .site-stats-sidebar { order: 3; }
-.aurora-sidebar .aurora-rules { order: 4; }
-.aurora-sidebar .friend-links-sidebar { order: 5; }
-
 .site-stats-heading {
   margin: -1rem -1rem .7rem;
   padding: .65rem .8rem;

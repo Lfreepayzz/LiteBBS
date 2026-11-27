@@ -1,0 +1,22 @@
+{
+  "name": "defaultblog",
+  "title": "官方博客主题 · defaultblog",
+  "version": "1.0.0",
+  "requires": ">=1.1 <2.0",
+  "entry": "layout.php",
+  "pagination": { "home": 12, "category": 12, "topic": 20 },
+  "settings": {
+    "banner_title": { "type": "text", "label": "首页横幅第一行", "default": "生活明朗", "max": 32 },
+    "banner_subtitle": { "type": "text", "label": "首页横幅第二行", "default": "万物可爱。", "max": 32 },
+    "announcement": { "type": "text", "label": "社区公告", "default": "欢迎来到社区，分享你的所见所想。", "max": 120 },
+    "site_start_date": { "type": "text", "label": "建站日期（YYYY-MM-DD）", "default": "", "max": 10 }
+  },
+  "assets": [
+    { "path": "theme.css", "pages": ["all"] },
+    { "path": "chrome.css", "pages": ["all"] },
+    { "path": "theme.js", "pages": ["all"] },
+    { "path": "home.css", "pages": ["home", "category"] },
+    { "path": "topic.css", "pages": ["topic.view"] },
+    { "path": "topic.js", "pages": ["topic.view"] }
+  ]
+}

@@ -3,7 +3,7 @@
   "id": "friend-links",
   "title": "友情链接",
   "description": "在侧边栏展示友情链接，并在申请时验证对方页面已链接本站。",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "requires": { "core": ">=1.0 <2.0" },
   "capabilities": { "admin.plugin-pages": ">=1.0" },
   "entry": "src/Plugin.php",

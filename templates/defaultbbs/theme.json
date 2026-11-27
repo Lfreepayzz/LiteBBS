@@ -1,0 +1,14 @@
+{
+  "name": "defaultbbs",
+  "version": "1.0.0",
+  "requires": ">=1.0 <2.0",
+  "entry": "layout.php",
+  "title": "官方论坛主题",
+  "author": "LiteBBS",
+  "assets": [
+    { "path": "theme.css", "pages": ["all"] },
+    { "path": "home.css", "pages": ["home", "category"] },
+    { "path": "topic.css", "pages": ["topic.view"] },
+    { "path": "topic.js", "pages": ["topic.view"] }
+  ]
+}

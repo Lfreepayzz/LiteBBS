@@ -1,0 +1,383 @@
+/* default home, based on the upstream homepage, category bar and home-top styles. */
+body.default #home_top {
+  width: 100%;
+  max-width: var(--default-width);
+  margin-inline: auto;
+  padding: 1rem var(--default-gutter) 0;
+}
+body.default #bbTimeList {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 50px;
+  margin-bottom: 1rem;
+  padding: .5rem 1rem;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  transition: border-color .3s, box-shadow .3s;
+}
+html[data-theme="dark"] body.default #bbTimeList { background: #000; }
+body.default #bbTimeList:is(:hover, :focus-within) { border-color: var(--default-main); box-shadow: var(--default-shadow-main); }
+body.default #bbtalk { flex: 1; min-width: 0; text-align: center; font-weight: 700; }
+body.default #bbtalk > a:first-child, body.default #bber-talk .li-style {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.default #bber-talk { height: 30px; margin: 0; padding: 0; overflow: hidden; list-style: none; line-height: 30px; }
+
+body.default #home_top_content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .5rem;
+}
+body.default #home_top_left { display: flex; flex-direction: column; min-width: 0; gap: .5rem; }
+body.default #home_top_right { display: flex; min-width: 0; }
+body.default #home_top_content:not(:has(#home_top_left)):has(#home_top_right),
+body.default #home_top_content:not(:has(#home_top_right)):has(#home_top_left) { grid-template-columns: minmax(0, 1fr); }
+body.default :is(#banners, #random-banner) {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 240px;
+  overflow: hidden;
+  padding: 2rem 3rem;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-border);
+  transition: border-color .3s, box-shadow .3s;
+}
+body.default :is(#banners, #random-banner):is(:hover, :focus-within) { border-color: var(--default-main); box-shadow: var(--default-shadow-main); }
+body.default #random-banner .banners-title { position: absolute; top: 2.9rem; left: 3rem; z-index: 1; display: flex; flex-direction: column; }
+body.default #random-banner .banners-title-big { margin-bottom: 8px; font-size: 36px; font-weight: 700; line-height: 1; }
+body.default #random-banner .banners-title-small { margin: 8px 0 .5rem; color: var(--default-secondtext); font-size: 12px; line-height: 1; }
+body.default #skills-tags-group-all {
+  position: absolute;
+  inset: 0 0 0 43%;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 14%);
+  pointer-events: none;
+}
+body.default #skills-tags-group-all .tags-group-track {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 240px);
+  transform: translateY(-50%) rotate(-30deg);
+  transform-origin: 240px center;
+}
+body.default #skills-tags-group-all :is(.tags-group-wrapper, .tags-group-sequence) { display: flex; width: max-content; }
+body.default #skills-tags-group-all .tags-group-wrapper { animation: default-banner-scroll 60s linear infinite; }
+@keyframes default-banner-scroll { to { transform: translateX(-50%); } }
+body.default #random-banner .tags-group-icon-pair { display: flex; flex-direction: column; gap: 1rem; margin-left: 1rem; }
+body.default :is(#banners, #random-banner) .tags-group-icon {
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 120px;
+  border-radius: 30px;
+  background: var(--skill-color, #fff);
+  box-shadow: 0 8px 16px -4px #0003;
+}
+body.default #random-banner .tags-group-icon img { display: block; width: 50%; height: 50%; object-fit: contain; }
+body.default #random-banner .tags-group-icon:nth-child(2) { transform: translateX(-50%); }
+body.default #random-banner .skill-docker { --skill-color: #57b6e6; }
+body.default #random-banner .skill-photoshop { --skill-color: #4082c3; }
+body.default #random-banner .skill-node { --skill-color: #333; }
+body.default #random-banner .skill-webpack { --skill-color: #2e3a41; }
+body.default #random-banner .skill-vite { --skill-color: #937df7; }
+body.default #random-banner .skill-flutter { --skill-color: #4499e4; }
+body.default #random-banner .skill-vue { --skill-color: #b8f0ae; }
+body.default #random-banner .skill-react { --skill-color: #222; }
+body.default #random-banner .skill-css3 { --skill-color: #2c51db; }
+body.default #random-banner .skill-js { --skill-color: #f7cb4f; }
+body.default #random-banner .skill-html { --skill-color: #e9572b; }
+body.default #random-banner .skill-git { --skill-color: #df5b40; }
+body.default #random-banner .skill-apifox { --skill-color: #e65164; }
+body.default #random-banner #random-hover {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 1rem .5rem;
+  opacity: 0;
+  background: #4259efdd;
+  color: #fff;
+  font-size: clamp(1.5rem, 4vw, 3.75rem);
+  font-weight: 700;
+  line-height: 1.2;
+  transition: opacity .3s, padding-left .3s;
+}
+body.default #random-hover .bannerText { display: flex; align-items: center; gap: 10px; }
+body.default #random-hover :is(.banner-plane, .banner-arrow) { flex: none; width: 1.33em; height: 1.33em; }
+body.default #random-banner #random-hover:focus-visible {
+  opacity: 1;
+  padding-left: 2rem;
+  backdrop-filter: blur(15px);
+  outline-offset: -4px;
+}
+@media (hover: hover) {
+  body.default #random-banner:hover #random-hover {
+    opacity: 1;
+    padding-left: 2rem;
+    backdrop-filter: blur(15px);
+  }
+}
+
+body.default #home_top .categoryGroup { display: flex; gap: .5rem; min-width: 0; }
+body.default #home_top .categoryItem { display: flex; flex: 1; min-width: 0; transition: flex-grow .5s; }
+body.default #home_top .categoryItem:is(:hover, :focus-within) { flex-grow: 1.6; }
+body.default #home_top .categoryGroup :where(.categoryButton, .categoryGroup > a) {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  min-height: 80px;
+  overflow: hidden;
+  padding: 12px 20px 20px;
+  border-radius: var(--default-radius);
+  background: var(--category-gradient, linear-gradient(100deg, #2479ed, #15c6ff));
+  background-size: 200% 100%;
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-shadow: 0 1px 3px #0006;
+  transition: background-position .3s;
+}
+body.default #home_top .categoryGroup :where(.categoryButton, .categoryGroup > a)::after {
+  position: absolute;
+  inset: auto auto 17px 20px;
+  width: 1rem;
+  height: 2px;
+  border-radius: 1px;
+  background: #fff;
+  content: "";
+}
+body.default #home_top .categoryGroup :where(.categoryButton, .categoryGroup > a):hover { background-position: 20% 0; }
+body.default #home_top .categoryGroup :where(.categoryButton, .categoryGroup > a) :where(svg, i) {
+  position: absolute;
+  top: 12%;
+  right: 4%;
+  width: 4rem;
+  height: 4rem;
+  opacity: .25;
+  filter: blur(2px);
+  transform: rotate(15deg);
+  font-size: 4rem;
+  font-style: normal;
+  line-height: 1;
+  transition: transform .3s, opacity .3s, filter .3s;
+}
+body.default #home_top .categoryGroup :where(.red, .categoryItem:nth-child(3n + 2), .categoryGroup > a:nth-child(3n + 2)) { --category-gradient: linear-gradient(to right, #f65, #ffbf37); }
+body.default #home_top .categoryGroup :where(.green, .categoryItem:nth-child(3n), .categoryGroup > a:nth-child(3n)) { --category-gradient: linear-gradient(to right, #119c80, #1eebeb); }
+body.default #home_top .categoryGroup :where(.categoryButton, .categoryGroup > a):hover :where(svg, i) { transform: scale(.72); opacity: .75; filter: none; }
+body.default #home_top .categoryGroup .blue { --category-gradient: linear-gradient(to right, #358bff, #15c6ff); }
+html[data-theme="dark"] body.default #home_top .categoryGroup { --category-gradient: linear-gradient(to right, #0653b8, #2fcbff); }
+html[data-theme="dark"] body.default #home_top .categoryGroup :where(.red, .categoryItem:nth-child(3n + 2), .categoryGroup > a:nth-child(3n + 2)) { --category-gradient: linear-gradient(to right, #e22a16, #da980c); }
+html[data-theme="dark"] body.default #home_top .categoryGroup :where(.green, .categoryItem:nth-child(3n), .categoryGroup > a:nth-child(3n)) { --category-gradient: linear-gradient(to right, #099e74, #0ea4a4); }
+html[data-theme="dark"] body.default #home_top .categoryGroup .blue { --category-gradient: linear-gradient(to right, #0653b8, #2fcbff); }
+
+/* A single featured link works with or without the optional todayCard cover. */
+body.default #home_top_right .topGroup { display: flex; flex: 1; flex-wrap: wrap; gap: .5rem; min-width: 0; min-height: 340px; }
+body.default #home_top_right .topGroup > a {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 1 1 min(200px, 100%);
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 160px;
+  overflow: hidden;
+  padding: 2rem;
+  border-radius: var(--default-radius);
+  background: radial-gradient(ellipse at top right, #457de4, transparent 65%), linear-gradient(145deg, #293b9f, #11172c);
+  color: #fff;
+  font-size: clamp(1.25rem, 2.1vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.3;
+  transition: box-shadow .3s;
+}
+body.default #home_top_right .topGroup > a:is(:hover, :focus-visible) { box-shadow: var(--default-shadow-main); }
+body.default #home_top_right .topGroup .todayCard-cover {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform .5s;
+}
+body.default #home_top_right .topGroup > a:hover .todayCard-cover { transform: scale(1.05); }
+body.default #home_top_right .topGroup > a:has(.todayCard-cover)::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(0deg, #000e, #0003 67%, transparent);
+  content: "";
+}
+body.default #home_top_right .todayCard-tips { font-size: .75rem; font-weight: 500; opacity: .85; }
+body.default #home_top_right .banner-button-group { display: flex; justify-content: end; margin-top: .5rem; }
+body.default #home_top_right .banner-button { padding: 6px 14px; border-radius: 20px; background: #ffffff30; font-size: .875rem; }
+
+body.default #recent-posts { min-width: 0; }
+body.default #recent-posts :where(.topic-index-nav, .home-heading) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 50px;
+  margin: 0 0 1rem;
+  padding: 6px 12px;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  transition: border-color .3s;
+}
+body.default #recent-posts :where(.topic-index-nav, .home-heading):hover { border-color: var(--default-main); }
+body.default #recent-posts .home-heading { justify-content: space-between; }
+body.default #recent-posts .home-heading > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+body.default #recent-posts .home-heading h1 { margin: 0; font-size: 1.25rem; line-height: 1.4; }
+body.default #recent-posts .home-heading span { color: var(--default-secondtext); font-size: .8rem; }
+body.default #recent-posts .topic-index-nav :where(a:not(.feed-create), button) {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+body.default #recent-posts .topic-index-nav :where(a:not(.feed-create), button):is(:hover, .active, .is-active, [aria-current]:not([aria-current="false"]), [aria-pressed="true"]) {
+  background: var(--default-main);
+  color: var(--default-on-main);
+}
+body.default #recent-posts :where(.topic-grid, .topic-list, .topic-feed) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+body.default :is(#recent-posts, .default-main) .topic-feed-item,
+body.default #recent-posts .recent-post-item {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  transition: border-color .3s, box-shadow .3s;
+}
+body.default :is(#recent-posts, .default-main) .topic-feed-item:is(:hover, :focus-within),
+body.default #recent-posts .recent-post-item:is(:hover, :focus-within) {
+  border-color: var(--default-main);
+  box-shadow: var(--default-shadow-main);
+}
+body.default #recent-posts .post_cover {
+  position: relative;
+  display: block;
+  flex: 0 0 42%;
+  min-width: 0;
+  min-height: 200px;
+  overflow: hidden;
+  background: var(--default-secondbg);
+}
+body.default #recent-posts .post_cover > a { display: block; height: 100%; }
+body.default #recent-posts .post_cover :where(img.post-bg, img.post_bg) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: filter .3s, transform .45s;
+}
+body.default #recent-posts .recent-post-item:hover .post_cover img { filter: brightness(.82); transform: scale(1.03); }
+body.default #recent-posts .post_cover.right { order: 1; }
+body.default #recent-posts .recent-post-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: .45rem;
+  min-width: 0;
+  min-height: 150px;
+  padding: 20px 32px;
+}
+body.default #recent-posts :where(.article-title, .recent-post-info > .content) {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+body.default #recent-posts .article-title { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.5; }
+body.default #recent-posts .recent-post-item:is(:hover, :focus-within) .article-title { color: var(--default-main); }
+body.default #recent-posts :where(.recent-post-info-top-tips, .recent-post-info > .content) { color: var(--default-secondtext); font-size: .8rem; line-height: 1.5; }
+body.default #recent-posts .article-meta-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 8px;
+  margin-top: .4rem;
+  color: var(--default-secondtext);
+  font-size: .85rem;
+  line-height: 1.45;
+}
+body.default #recent-posts :where(.sticky, .topic-pinned) { color: #ab4823; font-size: .75rem; font-weight: 700; }
+html[data-theme="dark"] body.default #recent-posts :where(.sticky, .topic-pinned) { color: #ffae8e; }
+
+/* The current core index also emits the default feed card shape. */
+body.default .default-main .topic-feed-item { align-items: center; gap: 12px; padding: 16px; }
+body.default .default-main .topic-feed-item + .topic-feed-item:not(.topic-feed > *) { margin-top: .75rem; }
+body.default .default-main .topic-feed-main { flex: 1; min-width: 0; }
+body.default .default-main .topic-feed-main h2 { margin: 0; font-size: 1.125rem; line-height: 1.4; }
+body.default .default-main .topic-feed-meta { display: flex; flex-wrap: wrap; gap: 2px 8px; color: var(--default-secondtext); font-size: .8rem; }
+body.default .default-main .topic-feed-item :where(.topic-avatar, .topic-replies) { flex: none; padding: 4px 10px; border-radius: 8px; background: var(--default-secondbg); }
+body.default .default-main .topic-replies { display: grid; justify-items: center; font-size: .75rem; line-height: 1.4; }
+body.default #recent-posts .recent-post-item { align-items: stretch; gap: 0; padding: 0; }
+body.default #recent-posts .recent-post-item > .topic-avatar { display: none; }
+body.default #recent-posts .recent-post-info .topic-replies { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; }
+body.default #recent-posts .topic-empty { grid-column: 1 / -1; padding: 2rem; border: var(--style-border); border-radius: var(--default-radius); background: var(--default-card-bg); }
+
+@media (min-width: 1201px) {
+  body.default #recent-posts .topic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.default #recent-posts .topic-grid .recent-post-item { flex-direction: column; }
+  body.default #recent-posts .topic-grid .recent-post-item { margin: 0; }
+  body.default #recent-posts .topic-grid .post_cover { flex: none; width: 100%; height: 225px; order: 0; }
+  body.default #recent-posts .topic-grid .recent-post-info { width: 100%; min-height: 174px; }
+  body.default #recent-posts .topic-grid .recent-post-info > .content { display: none; }
+}
+@media (max-width: 1200px) {
+  body.default #random-banner { min-height: 200px; padding: 1.5rem; }
+  body.default #random-banner .banners-title { top: 2rem; left: 1.5rem; }
+  body.default #random-banner .tags-group-icon { width: 88px; height: 88px; border-radius: 22px; }
+  body.default #home_top_right .topGroup { min-height: 168px; }
+  body.default #home_top_right .topGroup > a { padding: 1.25rem; }
+}
+@media (max-width: 768px) {
+  body.default #home_top { padding-top: .75rem; }
+  body.default #bbTimeList { gap: .5rem; margin-bottom: .75rem; padding-inline: .75rem; }
+  body.default #home_top_content { grid-template-columns: minmax(0, 1fr); }
+  body.default #random-banner { min-height: 160px; padding: 1.25rem; }
+  body.default #random-banner .banners-title { left: 1.25rem; }
+  body.default #random-banner .banners-title-big { font-size: 28px; }
+  body.default #random-banner .tags-group-icon { width: 64px; height: 64px; border-radius: 16px; }
+  body.default #home_top .categoryGroup { flex-direction: row; overflow: auto; scrollbar-width: thin; }
+  body.default #home_top .categoryGroup > :where(.categoryItem, a) { flex: 1 0 115px; }
+  body.default #home_top_content:has(#home_top_right) .categoryGroup > :where(.categoryItem, a):nth-child(n + 3) { display: flex; }
+  body.default #home_top .categoryGroup :where(.categoryButton, .categoryGroup > a) { min-height: 58px; padding: 8px 12px 14px; font-size: 1rem; }
+  body.default #home_top .categoryGroup :where(.categoryButton, .categoryGroup > a)::after { bottom: 9px; left: 12px; }
+  body.default #home_top_right .topGroup { min-height: 160px; }
+  body.default #recent-posts .recent-post-item { flex-direction: column; }
+  body.default #recent-posts .post_cover { flex: none; width: 100%; height: 200px; order: 0; }
+  body.default #recent-posts .post_cover.right { order: 0; }
+  body.default #recent-posts .recent-post-info { width: 100%; min-height: 140px; padding: 16px 20px; }
+  body.default #recent-posts .article-title { font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.default #home_top *, body.default #recent-posts * { transition-duration: 0s; }
+  body.default #recent-posts .recent-post-item:hover .post_cover img,
+  body.default #home_top_right .topGroup > a:hover .todayCard-cover { transform: none; }
+}

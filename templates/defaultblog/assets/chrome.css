@@ -1,0 +1,81 @@
+body.default #aside-content { display: flex; flex-direction: column; align-self: stretch; gap: 16px; }
+body.default #aside-content .sticky_layout { position: sticky; top: 76px; display: grid; gap: 16px; }
+body.default #aside-content .card-info { padding: 1rem 1.2rem; }
+body.default #aside-content .card-info .card-content { min-height: 286px; display: flex; flex-direction: column; }
+body.default #aside-content .card-info .author-info-avatar { margin: auto; }
+body.default #aside-content .author-info__description {
+  position: absolute;
+  inset: 50% 1.2rem auto;
+  margin: 0;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  body.default #aside-content .card-info .author-info-avatar { transition: opacity .25s, transform .25s; }
+  body.default #aside-content .author-info__description { transition: opacity .25s; }
+  body.default #aside-content .card-info:hover:not(:focus-within) .author-info-avatar { opacity: 0; transform: scale(.65); }
+  body.default #aside-content .card-info:hover:not(:focus-within) .author-info__description { opacity: 1; }
+}
+body.default #aside-content .author-info__desc { display: block; }
+body.default #aside-content .card-info-social-icons { display: flex; gap: 6px; }
+body.default #aside-content .card-info-social-icons a { width: 32px; height: 32px; padding: 0; font-size: 1rem; }
+body.default #aside-content .card-weixin { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 1rem 1.3rem; background: linear-gradient(110deg, #06a75c, #31c882); color: #092b1b; }
+body.default #aside-content .card-weixin:hover { box-shadow: 0 8px 20px #11b76b38; }
+body.default .card-weixin-copy { display: flex; flex-direction: column; line-height: 1.5; }
+body.default .card-weixin-copy strong { font-size: 1.1rem; }
+body.default .card-weixin-arrow { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 50%; background: #ffffff48; }
+body.default .card-tag-cloud { display: flex; flex-wrap: wrap; gap: 4px; }
+body.default .card-tag-cloud a { padding: 2px 8px; border-radius: 8px; }
+body.default .card-tag-cloud a::before { content: '# '; color: var(--default-secondtext); }
+body.default .card-tag-cloud a:is(:hover, .active) { background: var(--default-main); color: var(--default-on-main); }
+body.default .card-tag-cloud a:is(:hover, .active)::before { color: inherit; }
+html.default-stable-layout { scrollbar-gutter: stable; }
+html.default-stable-layout[data-theme="dark"] { color-scheme: dark; background: #18171d; }
+body.default .card-webinfo .webinfo {
+  margin: 0;
+  padding: 2px 12px;
+  border-radius: 8px;
+  background: var(--default-secondbg);
+}
+body.default .card-webinfo .webinfo-item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding-block: 7px;
+  line-height: 1.4;
+}
+body.default .card-webinfo .webinfo-item + .webinfo-item { border-top: var(--style-border); }
+body.default .card-webinfo .webinfo-item-title { color: var(--default-secondtext); font-size: .8rem; }
+body.default .card-webinfo .item-count {
+  margin: 0;
+  color: var(--default-fontcolor);
+  font-size: .875rem;
+  font-weight: 700;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+body.default #rightside { grid-template-rows: repeat(2, 35px); }
+body.default #rightside > button { grid-row: 1; }
+body.default #rightside > a { grid-row: 2; }
+body.default #aside-content .toc-content { max-height: 45vh; overflow: auto; margin: 0; padding-left: 1.5rem; }
+body.default .toc-content li[data-level]:not([data-level="2"]) { margin-left: 1rem; }
+
+body.default #footer { position: relative; }
+body.default #footer-wrap { padding: 40px 20px 0; }
+body.default #footer #footer-bar { margin-top: 1rem; color: var(--default-fontcolor); }
+body.default #footer .footer-bar-links { line-height: 1; }
+body.default #footer .footer-bar-left { display: flex; align-items: center; min-height: 32px; }
+body.default #footer .footer-bar-link { color: inherit; font-size: 1rem; font-weight: 700; }
+body.default #footer .footer-bar-link:hover { color: var(--default-main); }
+
+@media (max-width: 1200px) {
+  body.default #aside-content .sticky_layout { position: static; }
+}
+@media (max-width: 768px) {
+  body.default #aside-content .card-info { display: none; }
+  body.default #footer-wrap { padding: 0; }
+}

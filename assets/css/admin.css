@@ -39,9 +39,11 @@ button, input, textarea, select { font: inherit; }
 .admin-link { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 5px 12px; }
 .admin-link:hover { background: #2c3338; }
 .admin-sidebar .admin-link.active { background: var(--accent); color: var(--afg); font-weight: 650; }
-.admin-menu-icon { flex: 0 0 18px; font-size: 17px; text-align: center; }
+.admin-menu-icon { display: grid; flex: 0 0 18px; place-items: center; }
+.admin-menu-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .admin-submenu { padding: 3px 0; background: #2c3338; }
-.admin-submenu .admin-link { min-height: 32px; padding-left: 38px; font-size: 13px; }
+.admin-submenu .admin-link { min-height: 32px; padding-left: 28px; font-size: 13px; }
+.admin-submenu .admin-menu-icon svg { width: 15px; height: 15px; }
 .admin-submenu [aria-current] { color: #fff; font-weight: 700; }
 .admin-toolbar :focus-visible, .admin-sidebar :focus-visible { outline-color: #72aee6; outline-offset: -2px; }
 .admin-menu-toggle[hidden], .admin-sidebar[hidden], #program-update-progress[hidden] { display: none; }
@@ -54,7 +56,16 @@ button, input, textarea, select { font: inherit; }
 .admin-breadcrumbs > :not(:last-child)::after { margin-left: 8px; content: "\203A"; }
 .admin-content { padding: 16px var(--admin-gutter) 24px; overflow-x: auto; }
 .admin-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: auto; padding: 16px var(--admin-gutter); color: var(--muted); font-size: 13px; }
-.admin-footer a { color: var(--link); text-decoration: underline; }
+.admin-login-body { display: grid; min-height: 100dvh; place-items: center; padding: 20px; background: #1d2327; }
+.admin-login-panel { width: min(100%, 380px); padding: 32px; border-top: 4px solid var(--accent); background: var(--card); box-shadow: 0 12px 36px #0005; }
+.admin-login-kicker { margin: 0 0 8px; color: var(--accent); font-size: 11px; font-weight: 750; letter-spacing: 1.2px; }
+.admin-login-panel h1 { margin: 0; font-size: 24px; overflow-wrap: anywhere; }
+.admin-login-message { min-height: 22px; margin: 8px 0 20px; color: var(--muted); }
+.admin-login-form { display: grid; gap: 14px; }
+.admin-login-form label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.admin-login-form input { min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 4px; color: var(--fg); }
+.admin-login-form .primary { width: 100%; margin-top: 4px; }
+.admin-login-back { display: block; margin-top: 18px; color: var(--link); font-size: 12px; text-align: center; }
 .eyebrow { margin: 0 0 3px; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: 1px; }
 .admin-intro { color: var(--muted); font-size: 13px; }
 .admin-content > .form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 16px 0 28px; padding: 20px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }

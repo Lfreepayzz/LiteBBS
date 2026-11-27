@@ -1,0 +1,63 @@
+<?php declare(strict_types=1); ?>
+<!doctype html>
+<html lang="<?= e($c['locale'] ?? 'zh-CN') ?>">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="/assets/index.svg?v=<?= e(asset_version(__DIR__.'/../../assets/index.svg')) ?>" type="image/svg+xml">
+  <?= seo_head($title, $description, $indexable, $canonical, $c) ?>
+  <?= $theme_assets ?>
+  <?= $plugin_stylesheets ?>
+  <?= $theme_slots['head'] ?? '' ?>
+</head>
+<body<?= $isTopicPage ? ' class="topic-page"' : '' ?>>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="<?= e($c['site'] ?? 'LiteBBS') ?> 首页"><span class="brand-mark" aria-hidden="true"><?= e(text_slice($c['site'] ?? 'L', 0, 1)) ?></span><span><?= e($c['site'] ?? 'LiteBBS') ?></span></a>
+        <nav class="primary-nav" aria-label="主导航"><a href="/"<?= $isHomePage ? ' aria-current="page"' : '' ?>>首页</a><a href="/search">发现</a><a href="/market"<?= str_starts_with($requestPath, '/market') ? ' aria-current="page"' : '' ?>>开发者</a><?= $theme_slots['navigation'] ?? '' ?></nav>
+      <form class="header-search" action="/search" method="get" role="search"><label class="visually-hidden" for="rhex-search">搜索主题</label><input id="rhex-search" name="q" type="search" maxlength="60" placeholder="搜索讨论"><button type="submit" aria-label="搜索">⌕</button></form>
+      <nav class="account-nav" aria-label="账户">
+        <?php if ($user): ?>
+          <?php [$unreadNotifications,$unreadMessages]=unread_counts((int)$user['id']);$unreadTotal=$unreadNotifications+$unreadMessages; ?>
+          <a class="user-link" href="/me"><span class="mini-avatar" aria-hidden="true"><?php if (!empty($user['avatar_path'])): ?><img src="/avatar/<?= (int)$user['id'] ?>?v=<?= rawurlencode((string)$user['avatar_path']) ?>" alt=""><?php else: ?><?= e(text_slice($user['username'], 0, 1)) ?><?php endif; ?></span><span><?= e($user['username']) ?></span><?php if ($unreadTotal): ?><span class="notification-count" aria-label="<?= $unreadTotal ?> 条未读消息"><?= $unreadTotal > 99 ? '99+' : $unreadTotal ?></span><?php endif; ?></a>
+          <?php if ($user['role'] === 'admin'): ?><a href="/admin">管理</a><?php endif; ?>
+          <form method="post" action="/logout"><input type="hidden" name="csrf" value="<?= e(csrf()) ?>"><button type="submit">退出</button></form>
+        <?php else: ?>
+          <a href="/login">登录</a><a class="header-register" href="/register">注册</a>
+        <?php endif; ?>
+      </nav>
+    </div>
+  </header>
+
+  <div class="forum-shell">
+    <main class="main-column" id="main-content" tabindex="-1">
+      <div class="content-toolbar"><div class="breadcrumbs"><a href="/">社区</a><span>/</span><span><?= e($title) ?></span></div><?= $theme_slots['header_after'] ?? '' ?></div>
+      <div class="page-content"><?= $theme_slots['content_before'] ?? '' ?><?= $body ?><?= $theme_slots['content_after'] ?? '' ?></div>
+    </main>
+
+    <aside class="right-sidebar" aria-label="社区侧边栏">
+      <section class="welcome-card">
+        <span class="welcome-icon" aria-hidden="true"><?= e(text_slice($c['site'] ?? 'L', 0, 1)) ?></span>
+        <h2><?= e($c['site'] ?? 'LiteBBS') ?></h2>
+        <p>分享你的见解、经验和灵感，与社区成员一起认真讨论。</p>
+        <?php if ($user): ?><a class="sidebar-primary" href="/new">发起新讨论</a><?php else: ?><a class="sidebar-primary" href="/register">加入社区</a><a class="sidebar-secondary" href="/login">已有账号？登录</a><?php endif; ?>
+      </section>
+      <section class="sidebar-card">
+        <div class="sidebar-heading"><h2>讨论分区</h2><a href="/">全部</a></div>
+        <nav class="category-list" aria-label="讨论分区"><?= $left ?></nav>
+      </section>
+      <section class="sidebar-card rules-card">
+        <h2>社区公约</h2>
+        <p><span>01</span>友善交流，尊重不同观点</p><p><span>02</span>发布清晰且有价值的内容</p><p><span>03</span>拒绝广告与重复灌水</p>
+      </section>
+      <?php // Front-end plugin sidebar blocks render as independent bottom sections. ?>
+      <?= $theme_slots['sidebar'] ?? '' ?>
+    </aside>
+  </div>
+   <?= $theme_slots['footer_before'] ?? '' ?><?= $theme_slots['footer'] ?? '' ?>
+  <footer class="site-footer"><span><?= e($c['site'] ?? 'LiteBBS') ?></span><span>保持好奇，认真交流。</span></footer>
+  <?= $theme_slots['body_end'] ?? '' ?>
+  <?= $plugin_javascripts ?>
+</body>
+</html>

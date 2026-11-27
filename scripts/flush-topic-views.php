@@ -2,9 +2,8 @@
 declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("CLI only\n"); }
-require dirname(__DIR__).'/app/config.php';
-require dirname(__DIR__).'/app/core.php';
-if (!is_file(config_file())) exit("Private configuration is missing.\n");
+require dirname(__DIR__).'/app/kernel.php';
+if (!is_file(config_file())) exit("Database configuration is missing.\n");
 
 $redis = redis_cache_client();
 $db = null;
@@ -36,7 +35,7 @@ if ($redis) {
         if (!preg_match('/^[a-f0-9]{64}$/', $batch)) throw new RuntimeException('Topic view batch metadata is invalid.');
         $alreadyCommitted = h('SELECT batch_key FROM topic_view_flush_batches WHERE batch_key=? FOR UPDATE', [$batch])->fetchColumn();
         if ($alreadyCommitted === false) {
-            $statement = $db->prepare('UPDATE topics SET view_count=view_count+? WHERE id=?');
+            $statement = $db->prepare('UPDATE topics AS t JOIN categories AS c ON c.id=t.category_id SET t.view_count=t.view_count+? WHERE t.id=? AND t.status="normal" AND c.is_visible=1');
             foreach ($views as $id=>$count) if ((int)$id > 0 && (int)$count > 0) { $statement->execute([(int)$count, (int)$id]); $flushed += (int)$count; }
             h('INSERT INTO topic_view_flush_batches(batch_key,flushed_at) VALUES(?,UTC_TIMESTAMP(6))', [$batch]);
         }
@@ -81,7 +80,7 @@ if ($redis) {
         if (!preg_match('/^[a-f0-9]{64}$/', $batch)) throw new RuntimeException('Local topic view batch metadata is invalid.');
         $alreadyCommitted = h('SELECT batch_key FROM topic_view_flush_batches WHERE batch_key=? FOR UPDATE', [$batch])->fetchColumn();
         if ($alreadyCommitted === false) {
-            $statement = $db->prepare('UPDATE topics SET view_count=view_count+? WHERE id=?');
+            $statement = $db->prepare('UPDATE topics AS t JOIN categories AS c ON c.id=t.category_id SET t.view_count=t.view_count+? WHERE t.id=? AND t.status="normal" AND c.is_visible=1');
             foreach ($views as $id=>$count) { $statement->execute([$count, $id]); $flushed += $count; }
             h('INSERT INTO topic_view_flush_batches(batch_key,flushed_at) VALUES(?,UTC_TIMESTAMP(6))', [$batch]);
         }

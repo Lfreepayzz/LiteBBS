@@ -1,0 +1,360 @@
+/* default post hero and article surfaces adapted to the core discussion markup. */
+body.default #page-header.post-bg { padding-top: 0; }
+body.default #page-header.post-bg:not(.nav-fixed) #nav {
+  position: fixed;
+  border-color: transparent;
+  background: transparent;
+  color: #fff;
+}
+body.default #page-header.post-bg:not(.nav-fixed) #nav :is(.menus_item_child, .nav-popover) { color: var(--default-fontcolor); }
+body.default #page-header.post-bg #menus {
+  position: absolute;
+  left: 50%;
+  max-width: 50%;
+  transform: translateX(-50%);
+}
+body.default #page-header.post-bg #page-name {
+  display: block;
+  overflow: hidden;
+  max-width: 35.5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+body.default #page-header.post-bg.nav-fixed #menus { display: grid; justify-items: center; }
+body.default #page-header.post-bg.nav-fixed #menus > * { grid-area: 1 / 1; min-width: 0; max-width: 100%; }
+body.default #page-header.post-bg.nav-fixed #menus .menus_items { visibility: hidden; }
+body.default #page-header.post-bg.nav-fixed :is(#menus:hover, #menus:focus-within) .menus_items { visibility: visible; }
+body.default #page-header.post-bg.nav-fixed #menus:hover:not(:focus-within) #page-name { opacity: 0; pointer-events: none; }
+body.default #page-header.post-bg.nav-fixed #menus:focus-within #page-name:not(:focus) { opacity: 0; pointer-events: none; }
+body.default #page-header.post-bg.nav-fixed #menus:has(#page-name:focus) .menus_items { opacity: 0; pointer-events: none; }
+
+body.default #post-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 31.25rem;
+  background-color: #2755a7;
+  background-image: linear-gradient(125deg, #182c744d, transparent 50%, #2885ae45);
+  animation: default-post-gradient 9s ease-in-out -2s infinite alternate;
+  color: #fff;
+}
+@keyframes default-post-gradient {
+  from { background-color: #246c9e; }
+  to { background-color: #454baa; }
+}
+body.default #post-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  max-width: var(--default-width);
+  margin-inline: auto;
+  padding: 4rem var(--default-gutter);
+}
+@media (769px <= width <= 1400px) {
+  body.default #post-info { padding-inline: 3.5rem; }
+}
+body.default #post-info .post-title {
+  margin: 1rem 0;
+  font-size: 3.3rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+body.default #post-firstinfo :is(.topic-category, .topic-state) {
+  padding: 0 .7rem;
+  border-radius: 8px;
+  background: #ffffff29;
+  color: #fff;
+  font-size: .9rem;
+  font-weight: 700;
+  line-height: 32px;
+}
+body.default #post-firstinfo .topic-category::before { content: "# "; }
+body.default #post-meta {
+  display: grid;
+  gap: 2px;
+  max-width: 100%;
+  color: #ffffffe6;
+  font-size: .95em;
+}
+body.default #post-meta :is(.meta-firstline, .meta-secondline) { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+body.default #post-meta > :empty { display: none; }
+body.default #post-meta .topic-owner-avatar { color: #fff; background: #ffffff29; }
+body.default #post-info a:hover { color: #fff; text-decoration: underline; }
+body.default #post-info a:focus-visible { outline-color: #fff; }
+body.default #post-info .topic-actions { margin: 0 0 .85rem; width: 100%; }
+body.default #post-info .topic-actions :where(.post-edit, button, summary) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 1px solid #ffffff55;
+  border-radius: 8px;
+  background: #101b5155;
+  color: #fff;
+  font-size: .85rem;
+  cursor: pointer;
+}
+body.default #post-info .topic-actions :where(.post-edit, button, summary):hover { background: #101b5190; text-decoration: none; }
+body.default #post-info .topic-actions textarea { width: 100%; min-height: 5rem; padding: 8px; border: var(--style-border); border-radius: 8px; background: var(--default-card-bg); color: var(--default-fontcolor); resize: vertical; }
+body.default #post-hero .main-hero-waves-area { position: absolute; z-index: 5; inset: auto 0 -1px; pointer-events: none; }
+body.default #post-hero .waves-svg { display: block; width: 100%; height: 3.75rem; }
+body.default #post-hero .parallax > use:nth-child(1) { --wave-duration: 7s; --wave-delay: -2s; fill: #f7f9febd; }
+body.default #post-hero .parallax > use:nth-child(2) { --wave-duration: 10s; --wave-delay: -3s; fill: #f7f9fe82; }
+body.default #post-hero .parallax > use:nth-child(3) { --wave-duration: 13s; --wave-delay: -4s; fill: #f7f9fe36; }
+body.default #post-hero .parallax > use:nth-child(4) { --wave-duration: 20s; --wave-delay: -5s; fill: #f7f9fe; }
+html[data-theme="dark"] body.default #post-hero .parallax > use:nth-child(1) { fill: #18171dc8; }
+html[data-theme="dark"] body.default #post-hero .parallax > use:nth-child(2) { fill: #18171d80; }
+html[data-theme="dark"] body.default #post-hero .parallax > use:nth-child(3) { fill: #18171d3e; }
+html[data-theme="dark"] body.default #post-hero .parallax > use:nth-child(4) { fill: rgb(0 0 0 / 39%); }
+@media (prefers-reduced-motion: no-preference) {
+  body.default #post-hero .parallax > use {
+    animation: default-post-wave var(--wave-duration) cubic-bezier(.55, .5, .45, .5) var(--wave-delay) infinite;
+  }
+}
+@keyframes default-post-wave {
+  from { transform: translate3d(-90px, 0, 0); }
+  to { transform: translate3d(85px, 0, 0); }
+}
+
+body.default .default-main :where(.topic-page-heading, .topic-thread > .post, .reply-composer) {
+  padding: 2rem 2.5rem;
+  border: var(--style-border);
+  border-radius: var(--default-radius);
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-border);
+}
+body.default .default-main .topic-page-heading { margin-bottom: 12px; }
+body.default .topic-title-row, body.default .topic-heading-topline,
+body.default .topic-page-meta, body.default .reply-author, body.default .reply-author-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+body.default .topic-title-row h1 { margin: 0; font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.4; }
+body.default :where(.topic-page-meta, .reply-author-meta time) { color: var(--default-secondtext); font-size: .8rem; }
+body.default .default-main .topic-category { color: var(--default-main); font-weight: 700; }
+body.default .topic-state { padding: 1px 8px; border-radius: 6px; background: var(--default-card-btn-bg); font-size: .75rem; }
+body.default :where(.topic-owner-avatar, .reply-avatar) {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--default-main-op);
+  color: var(--default-main);
+  font-weight: 700;
+}
+body.default .reply-avatar { width: 40px; height: 40px; }
+body.default .reply-author-meta { min-width: 0; font-weight: 700; }
+body.default .topic-thread { display: grid; min-width: 0; gap: 12px; }
+body.default .topic-thread > .post { min-width: 0; }
+body.default .topic-thread > .post:target { outline: 2px solid var(--default-main); }
+body.default .default-main .topic-thread > .post-reply { padding: 1rem 1.25rem; }
+body.default .replies-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: .5rem 0 0;
+  font-size: 1.25rem;
+}
+body.default .replies-heading span { color: var(--default-secondtext); font-size: .8rem; }
+body.default .replies-heading::after { flex: 1; border-top: var(--style-border); content: ""; }
+body.default .reply-floor { margin-inline-start: auto; }
+body.default :where(.topic-actions, .post-tools, .reply-actions, .reply-composer-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 12px;
+}
+body.default :where(.topic-actions, .post-tools, .reply-author) form { margin: 0; }
+body.default .default-main :where(.topic-actions button, .post-tools button, .report-control summary, .post-edit, .post-delete button, .reply-floor, .reply-actions a) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 2px 9px;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-secondbg);
+  color: var(--default-secondtext);
+  font-size: .8rem;
+  cursor: pointer;
+}
+body.default .default-main :where(.topic-actions button, .post-tools button, .report-control summary, .post-edit, .post-delete button, .reply-floor, .reply-actions a):hover {
+  border-color: var(--default-main);
+  color: var(--default-main);
+}
+body.default .report-control[open] form { display: grid; justify-items: start; gap: 6px; width: min(100%, 20rem); margin-block: 8px; }
+body.default .report-control[open] { flex-basis: 100%; }
+
+body.default :where(#article-container, .topic-thread .post .body) {
+  min-width: 0;
+  color: var(--default-fontcolor);
+  font-size: 1rem;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+body.default .post-reply .body { margin-top: .75rem; }
+body.default :where(#article-container, .topic-thread .post .body) > :first-child { margin-top: 0; }
+body.default :where(#article-container, .topic-thread .post .body) > :last-child { margin-bottom: 0; }
+body.default :where(#article-container, .topic-thread .post .body) p { margin: 0 0 1rem; }
+body.default :where(#article-container, .topic-thread .post .body) :where(h1, h2, h3, h4, h5, h6) { margin: 1.25em 0 .5em; line-height: 1.5; }
+body.default :where(#article-container, .topic-thread .post .body) a { text-decoration: underline; text-decoration-color: var(--default-main); text-underline-offset: 3px; }
+body.default :where(#article-container, .topic-thread .post .body) :where(img, iframe, video) { border-radius: 8px; }
+body.default :where(#article-container, .topic-thread .post .body) img { display: block; margin: 0 auto 1rem; }
+body.default :where(#article-container, .topic-thread .post .body) li::marker { color: var(--default-main); }
+body.default :where(#article-container, .topic-thread .post .body, .reply-quote-note) blockquote {
+  margin: 1rem 0;
+  padding: .5rem .8rem;
+  border: var(--style-border);
+  border-radius: 8px;
+  background: var(--default-secondbg);
+  color: var(--default-secondtext);
+}
+body.default :where(#article-container, .topic-thread .post .body) blockquote > :last-child { margin-bottom: 0; }
+body.default :where(#article-container, .topic-thread .post .body) :where(pre, code) { font: .9em/1.7 Consolas, Menlo, monospace; }
+body.default :where(#article-container, .topic-thread .post .body) pre { overflow: auto; padding: 1rem; border: var(--style-border); border-radius: 8px; background: var(--default-secondbg); }
+body.default :where(#article-container, .topic-thread .post .body) pre code { font-size: inherit; }
+body.default :where(#article-container, .topic-thread .post .body) table { display: block; width: max-content; max-width: 100%; overflow: auto; border-collapse: collapse; }
+body.default :where(#article-container, .topic-thread .post .body) :where(td, th) { padding: 5px 10px; border: var(--style-border); }
+body.default :where(#article-container, .topic-thread .post .body) th { background: var(--default-secondbg); }
+body.default :where(#article-container, .topic-thread .post .body) hr { margin: 1.75rem 0; border: 0; border-top: 2px dashed var(--default-main-op); }
+
+/* The Markdown plugin loads after the theme and uses fixed light-mode colors. */
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-body {
+  color: var(--default-fontcolor);
+  line-height: inherit;
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  color: inherit;
+  border-color: var(--default-card-border);
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-body a {
+  color: var(--default-main);
+  text-decoration-color: currentColor;
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-body a:hover {
+  color: var(--default-main);
+  text-decoration-thickness: 2px;
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-body :is(blockquote, .markdown-alert) {
+  background: var(--default-secondbg);
+  color: var(--default-fontcolor);
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) :not(pre) > code,
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-body :not(pre) > code {
+  padding: .12em .35em;
+  border-radius: 5px;
+  background: var(--default-card-btn-bg);
+  color: var(--default-fontcolor);
+  font: .95em/1.6 Consolas, Menlo, monospace;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-table-wrap {
+  max-width: 100%;
+  margin-block: 1.1rem;
+  overflow-x: auto;
+  border: var(--style-border);
+  border-radius: 10px;
+  background: var(--default-card-bg);
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-table-wrap table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  color: var(--default-fontcolor);
+  font-size: 1em;
+  line-height: 1.65;
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-table-wrap :is(th, td) {
+  min-width: 6rem;
+  padding: .55em .8em;
+  border: 0;
+  border-bottom: var(--style-border);
+  vertical-align: top;
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-table-wrap th {
+  background: var(--default-card-btn-bg);
+  color: inherit;
+}
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-table-wrap tbody tr:nth-child(even) { background: var(--default-secondbg); }
+body.default .default-main :where(#article-container, .topic-thread .post .body) .markdown-table-wrap tbody tr:hover { background: var(--default-card-btn-bg); }
+
+body.default .reply-composer { margin-top: 1rem; }
+body.default .reply-composer-heading, body.default .reply-composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+body.default .reply-composer-heading :where(h2, p) { margin: 0; }
+body.default .reply-composer-heading > span { color: var(--default-secondtext); font-size: .8rem; }
+body.default .reply-editor { display: block; margin-top: 10px; font-weight: 600; }
+body.default .reply-editor textarea { min-height: 8rem; font-weight: 400; }
+body.default .reply-quote-note blockquote { white-space: pre-wrap; }
+body.default .locked-note { padding: 8px 14px; border: var(--style-border); border-radius: 8px; background: var(--default-main-op); }
+
+body.default .default-post-tail .post-copyright {
+  position: relative;
+  margin: 22px 0 8px;
+  padding: 1.35rem 1rem .6rem;
+  border: var(--style-border);
+  border-radius: 12px;
+  background: var(--default-secondbg);
+  text-align: center;
+}
+body.default .post-copyright__author_box { display: flex; flex-direction: column; align-items: center; }
+body.default .post-copyright__author_img {
+  position: absolute;
+  top: -20px;
+  left: calc(50% - 20px);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: var(--style-border);
+  border-radius: 50%;
+  background: var(--default-card-bg);
+  box-shadow: var(--default-shadow-main);
+  color: var(--default-main);
+  font-size: 18px;
+  font-weight: 700;
+}
+body.default .post-copyright__author_name { font-size: 17px; font-weight: 700; line-height: 1.2; }
+body.default .post-copyright__author_desc { color: var(--default-secondtext); font-size: .8rem; line-height: 1.5; }
+body.default .post-copyright__post__info { display: flex; justify-content: center; margin-top: .2rem; }
+body.default .post-copyright-title { max-width: 85%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+body.default .post-tail-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 6px 0 4px; }
+body.default .post-tail-tools :is(a, button) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--tail-action-color);
+  color: #fff;
+  font-size: .875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+body.default .post-tail-tools .post-tail-reply { --tail-action-color: #c13760; }
+body.default .post-tail-tools [data-share-topic] { --tail-action-color: #15764b; }
+body.default .post-tail-tools [data-copy-topic] { --tail-action-color: #425aef; }
+body.default .post-tail-tools :is(a, button):hover { filter: brightness(.9); }
+body.default .post-copyright__notice { margin: 0; color: var(--default-secondtext); font-size: 12px; }
+
+@media (max-width: 768px) {
+  body.default #page-header.post-bg.nav-fixed #nav:has(#toggle-menu) #menus { display: none; }
+  body.default #post-hero { min-height: 450px; }
+  body.default #post-info { align-items: center; padding: 11rem 6% 3rem; text-align: center; }
+  body.default #post-info .post-title { margin: .2rem 0; font-size: 1.5rem; }
+  body.default #post-info .topic-actions { justify-content: center; margin-top: .5rem; }
+  body.default #post-info .report-control[open] form { margin-inline: auto; }
+  body.default #post-meta :is(.meta-firstline, .meta-secondline) { justify-content: center; font-size: .9em; }
+  body.default #post-hero .main-hero-waves-area { display: none; }
+  body.default .default-main :where(.topic-page-heading, .topic-thread > .post, .reply-composer),
+  body.default .default-main .topic-thread > .post-reply { padding: 1rem; }
+}

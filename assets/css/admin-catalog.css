@@ -92,6 +92,22 @@
     cursor: pointer;
 }
 
+.extension-catalog .catalog-row-actions .catalog-share {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--link);
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: start;
+    cursor: pointer;
+}
+
+.extension-catalog .catalog-row-actions .catalog-share:hover { text-decoration: underline; }
+
 .extension-catalog .catalog-row-actions .is-danger { color: var(--catalog-danger); }
 .extension-catalog .catalog-row-actions .catalog-row-action:hover { text-decoration: underline; }
 
@@ -221,6 +237,20 @@
 }
 
 .extension-catalog .catalog-button { background: var(--card); color: var(--link); }
+.catalog-theme-actions .catalog-share {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 4px 10px;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    background: var(--card);
+    color: var(--link);
+    font-size: 13px;
+    cursor: pointer;
+}
+.catalog-theme-actions .catalog-share:hover { background: var(--soft); text-decoration: underline; }
 .extension-catalog .catalog-button.is-danger { color: var(--catalog-danger); }
 .extension-catalog .catalog-button:hover { background: var(--soft); text-decoration: underline; }
 .catalog-theme-actions .primary { border-color: var(--accent); }

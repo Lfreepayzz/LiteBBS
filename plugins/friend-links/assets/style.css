@@ -111,13 +111,6 @@ html[data-theme="dark"] .friend-links-application {
   font-size: .66rem;
 }
 
-@media (min-width: 961px) {
-  .right-sidebar:has(.friend-links-sidebar) {
-    max-height: none;
-    overflow: visible;
-  }
-}
-
 .friend-links-application,
 .friend-links-admin {
   max-width: 760px;
